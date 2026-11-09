@@ -1,0 +1,101 @@
+{
+  "_genere_par": "node siege/droits.js — ne pas modifier à la main : Siège › Droits",
+  "permissions": {
+    "deny": [
+      "Read(~/.siege/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.config/gh/**)",
+      "Edit(/droits/**)",
+      "Edit(/.claude/**)",
+      "Edit(/siege/**)",
+      "Write(/droits/**)",
+      "Write(/.claude/**)",
+      "Write(/siege/**)"
+    ],
+    "allow": [
+      "Bash(node siege/backlog.js:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/siege/garde.js\""
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/siege/garde.js\""
+          }
+        ]
+      }
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "excludedCommands": [
+      "node siege/backlog.js *",
+      "node siege/github.js *",
+      "node siege/exception.js *"
+    ],
+    "network": {
+      "allowedDomains": [
+        "github.com",
+        "api.github.com",
+        "codeload.github.com",
+        "*.githubusercontent.com",
+        "api.notion.com"
+      ]
+    },
+    "filesystem": {
+      "denyRead": [
+        "~/.siege",
+        "~/.ssh",
+        "~/.aws",
+        "~/.config/gh",
+        "~/.netrc"
+      ],
+      "denyWrite": [
+        "./droits",
+        "./.claude",
+        "./siege",
+        "./portfolio/features.json",
+        "./portfolio/bugs.json",
+        "./portfolio/commentaires.json",
+        "./portfolio/source-backlog.json"
+      ]
+    },
+    "credentials": {
+      "envVars": [
+        {
+          "name": "NOTION_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "GH_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "GITHUB_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "mode": "deny"
+        }
+      ]
+    }
+  }
+}

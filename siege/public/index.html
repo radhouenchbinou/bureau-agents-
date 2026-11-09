@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Le Siège</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='2' y='1' width='12' height='14' rx='2' fill='%23534AB7'/%3E%3Crect x='4.5' y='3.5' width='3' height='3' rx='.6' fill='%23EEEDFE'/%3E%3Crect x='8.5' y='3.5' width='3' height='3' rx='.6' fill='%23EEEDFE'/%3E%3Crect x='4.5' y='8' width='3' height='3' rx='.6' fill='%23EEEDFE'/%3E%3Crect x='8.5' y='8' width='3' height='3' rx='.6' fill='%23EEEDFE'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="eyebrow">Entreprise d'agents IA</div>
+    <h1>Le Siège</h1>
+    <div class="counts" id="counts"></div>
+    <div class="bandeau" id="bandeau" role="status" hidden></div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Vues">
+    <button type="button" role="tab" data-v="bureau" aria-selected="true">Bureau</button>
+    <button type="button" role="tab" data-v="backlog" aria-selected="false">Backlog</button>
+    <button type="button" role="tab" data-v="agents" aria-selected="false">Agents</button>
+    <button type="button" role="tab" data-v="reglages" aria-selected="false">Réglages</button>
+  </nav>
+
+  <section class="vue" id="v-bureau" role="tabpanel"></section>
+  <section class="vue" id="v-backlog" role="tabpanel" hidden></section>
+  <section class="vue" id="v-agents" role="tabpanel" hidden></section>
+  <section class="vue" id="v-reglages" role="tabpanel" hidden></section>
+</div>
+
+<div class="voile" id="voile" hidden></div>
+<aside class="tiroir" id="tiroir" aria-modal="true" role="dialog" aria-labelledby="tiroir-titre" hidden></aside>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>

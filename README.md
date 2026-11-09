@@ -1,0 +1,179 @@
+# Entreprise d'agents IA
+
+Une organisation d'agents [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) calquée sur une
+vraie entreprise, réutilisable sur n'importe quel écosystème de projets : un **directeur de programme**
+orchestre des **équipes de filiale** (une par projet) et des **services partagés**, sous la validation d'un
+**CEO** (vous) à chaque étape. Le backlog vit dans **Notion** (ou en local), et le **Siège** donne une vue
+d'ensemble : bureau des agents en activité, backlog, agents modifiables.
+
+```
+Vous (CEO) ── valide chaque étape, répond aux questions dans Notion
+ └─ Directeur de programme  (la session Claude Code ouverte dans le Siège)
+     ├─ Services partagés : architecte · reviewer · rssi-devsecops · devops · tech-writer
+     └─ Filiales (une par projet) : product-owner · dev-backend · dev-frontend · qa
+```
+
+## Ce qu'il y a dedans
+
+| Dossier / fichier | Rôle |
+|---|---|
+| `CLAUDE.md` | Le règlement du siège : rôle du directeur, règles d'orchestration, backlog |
+| `.claude/agents/` | Les 9 agents (rôles génériques, un fichier `.md` chacun) |
+| `.claude/commands/` | `/feature`, `/corriger`, `/standup`, `/audit-secu`, `/nouvelle-filiale`, `/notion-init` |
+| `process/` | Le circuit d'une feature (10 étapes, portes de validation) et la méthode de chaque rôle |
+| `templates/` | Fiche de filiale, ADR |
+| `portfolio/` | Registre des filiales, contrats d'interface entre filiales, décisions de groupe, backlog local |
+| `siege/` | Le Siège (interface web locale) et l'outil `backlog.js` utilisé par les agents |
+| `exemples/rne-v2/` | Exemple complet : reconstruction d'un scrapper par 4 filiales, avec son backlog |
+
+Les rôles d'une filiale sont **génériques** : les mêmes agents servent toutes les filiales, et chacun lit la
+**fiche** de la filiale (`<projet>/CLAUDE.md`) avant d'agir. Changer d'écosystème = changer le registre
+`portfolio/filiales.md`.
+
+## Prérequis
+
+- Claude Code installé et connecté (`claude` dans un terminal).
+- Node.js 18.17 ou plus (le Siège et l'outil backlog n'ont **aucune dépendance npm**).
+- Git.
+- Facultatif : un compte Notion.
+
+## Démarrer en 5 minutes
+
+```bash
+git clone <ce repo> mon-siege && cd mon-siege
+node siege/server.js          # le Siège sur http://127.0.0.1:4848
+claude                        # dans un autre terminal : le directeur de programme
+```
+
+Le Siège n'écoute que sur votre machine. Il lit l'activité de Claude Code dans `~/.claude` (lecture seule) :
+les agents « s'allument » à leur poste quand une mission leur est confiée.
+
+## Intégrer un nouveau projet (une filiale)
+
+1. **Mettre le projet à portée du Siège.** Claude Code travaille dans le dossier où il est lancé : le projet
+   doit être dans le Siège. Au choix :
+   ```bash
+   git clone git@github.com:moi/mon-api.git projets/mon-api      # copie de travail dédiée
+   ln -s ~/code/mon-api projets/mon-api                          # ou lien vers votre copie existante
+   ```
+   (`projets/` est ignoré par git : chaque projet garde son propre dépôt.)
+   Plusieurs projets qui se parlent = plusieurs filiales ; un gros projet peut aussi être découpé en
+   plusieurs filiales (un dossier chacune), comme dans `exemples/rne-v2`.
+
+2. **Intégrer la filiale** dans Claude Code :
+   ```
+   /nouvelle-filiale MonAPI projets/mon-api
+   ```
+   Le directeur explore le projet en lecture seule (pom.xml, package.json, Dockerfile, CI…), vous propose un
+   préfixe d'identifiant (ex. `API`), rédige la **fiche** `projets/mon-api/CLAUDE.md` à partir de
+   `templates/fiche-filiale.md`, crée `docs/backlog`, `docs/adr`, `docs/rapports` et inscrit la filiale dans
+   `portfolio/filiales.md`.
+
+3. **Compléter la fiche** (c'est le plus important) : règles métier critiques, commandes de build et de
+   test, ce que les agents ne doivent jamais toucher, données sensibles. Tout ce qui est marqué
+   `À COMPLÉTER` doit l'être avant la première feature.
+
+4. **Déclarer les échanges avec les autres filiales** : le directeur confie à l'`architecte` un ticket
+   `GRP-…` pour écrire les contrats dans `portfolio/interfaces.md` (format, exemple, versionnement,
+   erreurs). Pas de contrat → pas de développement qui en dépend.
+
+5. **Remplir le backlog** : dans le Siège (onglet Backlog › Nouvelle feature), dans Notion, ou en demandant
+   au directeur. Fixez les **rangs** : 1 = le plus urgent.
+
+6. **Lancer** : `/feature` prend le premier ticket de la file ; `/feature API-003` un ticket précis. Depuis le
+   Siège, le bouton *Lancer* ouvre Claude Code dans un Terminal (macOS) ou copie la commande.
+
+### Adapter l'équipe
+
+- Un rôle propre à un projet (data engineer, mobile…) : onglet **Agents › Nouvel agent** du Siège, ou un
+  fichier dans `.claude/agents/`. La **description** dit au directeur quand faire appel à lui.
+- Une règle propre à un projet pour un rôle existant : section « Règles spécifiques par rôle » de la fiche
+  de la filiale (pas besoin de dupliquer l'agent).
+- Un circuit différent : `process/workflow-feature.md` (le directeur le relit à chaque `/feature`).
+
+### Retirer un projet
+
+Passez sa ligne à `Archivée` dans `portfolio/filiales.md` et retirez le dossier de `projets/`.
+
+## Le backlog : Features et Bugs
+
+Deux tableaux : **Features** (demandes et ajouts, `API-001`) et **Bugs** (remontés par les testeurs,
+`BUG-001`, reliés à une feature, avec gravité Bloquant / Majeur / Mineur). Chaque ticket a un **rang**.
+
+L'ordre de traitement est unique et calculé : **bugs bloquants**, puis **features prêtes** (toutes leurs
+dépendances livrées) par rang, puis les **autres bugs**.
+
+Les agents y accèdent tous par le même outil, que le backlog soit dans Notion ou en local :
+
+```bash
+node siege/backlog.js file                     # quoi faire ensuite
+node siege/backlog.js maj API-003 --statut "En cours" --etape "4 · Développement" --agent dev-backend
+node siege/backlog.js commenter API-003 --auteur dev-backend --texte "Endpoint prêt, tests verts"
+node siege/backlog.js commenter API-003 --auteur qa --question --texte "Arrondi au centime supérieur ?"
+node siege/backlog.js creer bug --filiale MonAPI --story API-003 --titre "…" --gravite Majeur --detecte-par qa
+node siege/backlog.js questions                # questions des agents encore sans réponse
+```
+
+**Commentaires de suivi et questions** : à chaque étape, l'agent laisse un commentaire sur le ticket. Une
+question au CEO bloque le ticket jusqu'à votre réponse, que vous écrivez **directement en commentaire sur la
+page Notion** (ou dans le Siège). Le directeur la lit avant de reprendre.
+
+## Brancher Notion
+
+L'équipe est autonome sur Notion : c'est elle qui crée les bases et les fait vivre, via une intégration.
+
+1. Créez une **intégration interne** sur <https://www.notion.so/profile/integrations> avec les droits :
+   lire, mettre à jour et insérer du contenu ; lire et insérer des commentaires.
+2. Donnez son jeton au Siège (onglet **Réglages**) ou via `export NOTION_TOKEN=ntn_…`. Il est stocké dans
+   `~/.siege/notion-token` (droits 600), **jamais dans le dépôt**.
+3. Créez une page Notion (ex. « Mon entreprise d'agents ») et partagez-la avec l'intégration
+   (••• › Connexions).
+4. Dans Claude Code : `/notion-init <lien de la page>`. Le directeur crée les bases **Features** et **Bugs**
+   sous la page, bascule le backlog sur Notion (`portfolio/source-backlog.json`) et importe les tickets
+   locaux.
+
+Pour revenir aux fichiers locaux : Siège › Réglages › *Revenir aux fichiers locaux* (Notion n'est pas
+modifié).
+
+## Le circuit d'une feature
+
+| # | Étape | Agent | Livrable |
+|---|---|---|---|
+| 0 | Cadrage | directeur | filiales concernées, circuit retenu |
+| 1 | Spécification | product-owner | user story, règles métier, critères d'acceptation |
+| 2 | Conception | architecte | ADR (+ contrat si plusieurs filiales) |
+| 3 | Plan de tests | qa | cas de test, cas limites |
+| 4 | Développement | dev-backend, dev-frontend | code + tests, branche `feature/<ID>` |
+| 5 | Recette | qa | rapport, un ticket Bug par anomalie |
+| 6 | Revue | reviewer | bloquant / à corriger / suggestion |
+| 7 | Sécurité | rssi-devsecops | GO / NO-GO |
+| 8 | Livraison | devops | pipeline, conteneur, procédure (sans déployer) |
+| 9 | Documentation | tech-writer | doc HTML de la filiale |
+
+Vous validez après chaque étape (Valider / Corriger / Arrêter). Rien n'est poussé, fusionné ni déployé
+sans votre accord. Variantes : circuit court, ticket de groupe, correction de bug (`/corriger`) — voir
+`process/workflow-feature.md`.
+
+## Le Siège
+
+`node siege/server.js` puis <http://127.0.0.1:4848> :
+
+- **Bureau** : la direction, les services partagés et un étage par filiale ; chaque agent est « au poste »
+  quand Claude Code lui a confié une mission, avec le ticket en cours ; journal des missions.
+- **Backlog** : file de travail avec bouton *Lancer*, questions des agents, tableaux Features / Bugs en
+  colonnes par statut ; glisser une carte change son statut ou son rang ; fiche ticket avec fil de
+  commentaires et réponse du CEO.
+- **Agents** : créer, modifier (description, modèle, outils, consigne), supprimer.
+- **Réglages** : source du backlog et branchement Notion.
+
+Sécurité : écoute sur 127.0.0.1 uniquement, hôte vérifié (anti DNS rebinding), modifications en JSON avec
+jeton de page (anti-CSRF), aucun contenu de conversation servi, jeton Notion jamais renvoyé au navigateur.
+
+Tests : `cd siege && npm test` (dont l'intégration Notion de bout en bout contre une fausse API).
+
+## Exemple : RNE v2
+
+`exemples/rne-v2/` contient un écosystème complet pour essayer l'organisation : la reconstruction à partir
+de zéro d'un scrapper du Registre National des Entreprises tunisien, découpée en 4 filiales (Collecte,
+Données, Pilotage, Plateforme), avec 34 features ordonnées en 7 jalons et le rapport du premier test de bout
+en bout. Pour l'utiliser : `exemples/rne-v2/LISEZMOI.md`.

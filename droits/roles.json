@@ -1,0 +1,319 @@
+{
+  "version": 1,
+  "_lisez_moi": "Source unique des droits de chaque agent. Tout ce qui n'est pas listé est refusé. Après modification : node siege/droits.js appliquer (met à jour outils et skills des agents). Les commandes shell sont des expressions régulières sur la commande normalisée (mots séparés par un espace, guillemets retirés). {role} est remplacé par le nom de l'agent.",
+  "commun": {
+    "lecture_interdite": [
+      "~/.siege/**",
+      "~/.ssh/**",
+      "~/.aws/**",
+      "~/.config/gh/**",
+      "**/*.env",
+      "**/*.pem",
+      "**/*.key",
+      "**/.git/config",
+      "**/.netrc"
+    ],
+    "ecriture_interdite": [
+      ".claude/**",
+      "droits/**",
+      "siege/**",
+      "portfolio/*.json",
+      "**/CLAUDE.md",
+      "**/*.env",
+      "**/*.pem",
+      "**/.git/**",
+      "~/**"
+    ],
+    "bash": [
+      "^node siege/backlog\\.js (aide|source|file|liste|voir|commentaires|questions)\\b",
+      "^node siege/backlog\\.js commenter \\S+ .*--auteur {role}( |$)",
+      "^node siege/exception\\.js (liste|voir)\\b",
+      "^git( -C \\S+)? (status|log|diff|show|branch|rev-parse|ls-files)( |$)"
+    ],
+    "tubes": [
+      "head",
+      "tail",
+      "grep",
+      "wc",
+      "sort",
+      "uniq"
+    ],
+    "outils_toujours": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Skill",
+      "TodoWrite",
+      "ToolSearch",
+      "BashOutput"
+    ],
+    "skills": [
+      "backlog-siege",
+      "demander-une-exception"
+    ]
+  },
+  "roles": {
+    "directeur": {
+      "libelle": "Directeur de programme (session principale)",
+      "outils": [
+        "Agent",
+        "Bash",
+        "TaskCreate",
+        "TaskUpdate",
+        "TaskList",
+        "TaskGet",
+        "AskUserQuestion"
+      ],
+      "ecriture": [],
+      "bash": [
+        "^node siege/backlog\\.js (maj|creer|commenter)\\b",
+        "^node siege/exception\\.js (demander|activer|terminer)\\b",
+        "^node siege/github\\.js etat\\b"
+      ],
+      "web": [],
+      "github": {},
+      "skills": []
+    },
+    "product-owner": {
+      "libelle": "Product Owner",
+      "outils": [
+        "Write",
+        "Edit",
+        "Bash"
+      ],
+      "ecriture": [
+        "projets/**/docs/backlog/**"
+      ],
+      "bash": [
+        "^node siege/backlog\\.js maj [A-Z]{3}-\\d{3}\\b",
+        "^node siege/backlog\\.js creer feature\\b"
+      ],
+      "web": [],
+      "github": {},
+      "skills": [
+        "ecrire-une-user-story"
+      ]
+    },
+    "architecte": {
+      "libelle": "Architecte",
+      "outils": [
+        "Write",
+        "Edit",
+        "Bash"
+      ],
+      "ecriture": [
+        "projets/**/docs/adr/**",
+        "portfolio/interfaces.md",
+        "portfolio/decisions/**"
+      ],
+      "bash": [],
+      "web": [],
+      "github": {
+        "contents": "read"
+      },
+      "skills": [
+        "rediger-un-adr",
+        "ecrire-un-contrat-d-interface"
+      ]
+    },
+    "dev-backend": {
+      "libelle": "Développeur backend",
+      "outils": [
+        "Write",
+        "Edit",
+        "Bash"
+      ],
+      "ecriture": [
+        "projets/**"
+      ],
+      "bash": [
+        "^git( -C \\S+)? (add|commit|checkout|switch|stash|restore|mv|rm)( |$)",
+        "^python3? -m (unittest|pytest|py_compile|compileall)\\b",
+        "^python3? projets/\\S+\\.py\\b",
+        "^(mvn|\\./mvnw|gradle|\\./gradlew) (-q )?(test|verify|compile|package)\\b",
+        "^npm (test|run (test|build|lint))\\b",
+        "^node --test\\b",
+        "^(mkdir|touch) projets/\\S+",
+        "^cd projets/\\S+$",
+        "^node siege/backlog\\.js maj BUG-\\d{3} --statut (\"?En correction\"?|\"?À vérifier\"?)\\b",
+        "^node siege/github\\.js (pousser|pr) .*--role {role}( |$)"
+      ],
+      "web": [],
+      "github": {
+        "contents": "write",
+        "pull_requests": "write"
+      },
+      "skills": [
+        "tdd-et-changement-minimal",
+        "branche-et-commit"
+      ]
+    },
+    "dev-frontend": {
+      "libelle": "Développeur frontend",
+      "outils": [
+        "Write",
+        "Edit",
+        "Bash"
+      ],
+      "ecriture": [
+        "projets/**"
+      ],
+      "bash": [
+        "^git( -C \\S+)? (add|commit|checkout|switch|stash|restore|mv|rm)( |$)",
+        "^npm (ci|test|run (test|build|lint))\\b",
+        "^npx (ng|tsc|eslint|vitest|jest) (test|build|lint|--noEmit)?\\b",
+        "^node --test\\b",
+        "^(mkdir|touch) projets/\\S+",
+        "^cd projets/\\S+$",
+        "^node siege/backlog\\.js maj BUG-\\d{3} --statut (\"?En correction\"?|\"?À vérifier\"?)\\b",
+        "^node siege/github\\.js (pousser|pr) .*--role {role}( |$)"
+      ],
+      "web": [],
+      "github": {
+        "contents": "write",
+        "pull_requests": "write"
+      },
+      "skills": [
+        "tdd-et-changement-minimal",
+        "branche-et-commit",
+        "interface-accessible"
+      ]
+    },
+    "qa": {
+      "libelle": "Testeur QA",
+      "outils": [
+        "Write",
+        "Edit",
+        "Bash"
+      ],
+      "ecriture": [
+        "projets/**/tests/**",
+        "projets/**/test/**",
+        "projets/**/docs/rapports/**",
+        "projets/**/docs/backlog/**"
+      ],
+      "bash": [
+        "^python3? -m (unittest|pytest)\\b",
+        "^python3? projets/\\S+\\.py\\b",
+        "^(mvn|\\./mvnw|gradle|\\./gradlew) (-q )?(test|verify)\\b",
+        "^npm (test|run test)\\b",
+        "^node --test\\b",
+        "^cd projets/\\S+$",
+        "^node siege/backlog\\.js creer bug\\b",
+        "^node siege/backlog\\.js maj BUG-\\d{3}\\b"
+      ],
+      "web": [],
+      "github": {
+        "contents": "read"
+      },
+      "skills": [
+        "plan-de-tests",
+        "remonter-un-bug"
+      ]
+    },
+    "reviewer": {
+      "libelle": "Relecteur de code",
+      "outils": [
+        "Write",
+        "Bash"
+      ],
+      "ecriture": [
+        "projets/**/docs/rapports/**",
+        "portfolio/decisions/*-review.md"
+      ],
+      "bash": [
+        "^node siege/github\\.js statut .*--contexte revue .*--role {role}( |$)"
+      ],
+      "web": [],
+      "github": {
+        "contents": "read",
+        "pull_requests": "read",
+        "statuses": "write"
+      },
+      "skills": [
+        "revue-de-code"
+      ]
+    },
+    "rssi-devsecops": {
+      "libelle": "RSSI / DevSecOps",
+      "outils": [
+        "Write",
+        "Bash"
+      ],
+      "ecriture": [
+        "projets/**/docs/rapports/**",
+        "portfolio/decisions/*-secu.md"
+      ],
+      "bash": [
+        "^(pip-audit|npm audit|gitleaks detect|semgrep|bandit)\\b",
+        "^python3? -m (pip_audit|bandit)\\b",
+        "^node siege/github\\.js statut .*--contexte securite .*--role {role}( |$)"
+      ],
+      "web": [],
+      "github": {
+        "contents": "read",
+        "pull_requests": "read",
+        "statuses": "write",
+        "security_events": "read"
+      },
+      "skills": [
+        "audit-securite",
+        "detection-de-secrets"
+      ]
+    },
+    "devops": {
+      "libelle": "DevOps",
+      "outils": [
+        "Write",
+        "Edit",
+        "Bash"
+      ],
+      "ecriture": [
+        "projets/**/.github/**",
+        "projets/**/deploy/**",
+        "projets/**/Dockerfile",
+        "projets/**/*.service",
+        "projets/**/*.timer",
+        "projets/**/docs/rapports/**",
+        "projets/**/*.env.example"
+      ],
+      "bash": [
+        "^git( -C \\S+)? (add|commit|checkout|switch)( |$)",
+        "^docker (build|compose config)\\b",
+        "^systemd-analyze verify\\b",
+        "^node siege/github\\.js (pousser|pr|fusionner) .*--role {role}( |$)"
+      ],
+      "web": [],
+      "github": {
+        "contents": "write",
+        "pull_requests": "write",
+        "statuses": "read",
+        "workflows": "write",
+        "actions": "read"
+      },
+      "skills": [
+        "pipeline-ci-securise",
+        "fusion-apres-validations"
+      ]
+    },
+    "tech-writer": {
+      "libelle": "Rédacteur technique",
+      "outils": [
+        "Write",
+        "Edit",
+        "Bash"
+      ],
+      "ecriture": [
+        "projets/**/docs/site/**"
+      ],
+      "bash": [],
+      "web": [],
+      "github": {
+        "contents": "read"
+      },
+      "skills": [
+        "documentation-html"
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "siege",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Le Siège : bureau des agents, backlog Features / Bugs (local ou Notion) et pilotage d'une entreprise d'agents Claude Code.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js",
+    "backlog": "node backlog.js"
+  },
+  "engines": { "node": ">=18.17" }
+}
