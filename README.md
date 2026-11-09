@@ -410,3 +410,7 @@ domicile, avec **3 filiales et un repo chacune** (API Spring Boot, application a
 un groupe pour les contrats, et un backlog de 14 features en 4 jalons. On y trouve un contrat d'interface d'abord,
 des features avec dépendances, et une **feature multi-filiales livrée d'un bloc** (GRP-002 : acompte payé en ligne,
 une PR dans l'API et une dans la vitrine). Pour l'installer : `exemples/cyclofix/LISEZMOI.md`.
+
+## Licence
+
+[MIT](LICENSE) — © 2026 Radhouen Chbinou. Édition GitHub Copilot + Teams : [entreprise-agents-copilot](https://github.com/radhouenchbinou/entreprise-agents-copilot).

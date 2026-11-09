@@ -2,6 +2,7 @@
   "name": "siege",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "description": "Le Siège : bureau des agents, backlog Features / Bugs (local ou Notion) et pilotage d'une entreprise d'agents Claude Code.",
   "scripts": {
     "start": "node server.js",
