@@ -6,6 +6,7 @@ const fs = require('fs'), fsp = fs.promises, path = require('path'), os = requir
 
 const ACTIF_MS = 3 * 60e3;          // un agent qui a écrit il y a moins de 3 min est « à son poste »
 const HORIZON_MS = 7 * 864e5;
+const SANS_ENREGISTREMENT_MS = 10 * 60e3; // session sans fichier ~/.claude/sessions : vivante si écrite depuis moins de 10 min
 const STORY = /\b([A-Z]{3}-\d{3})\b/;
 const FILIALE = /Filiale\s*:\s*([^\n—–-]+?)\s*(?:[—–-]|\n|$)/;
 
@@ -46,8 +47,11 @@ async function lire({ racine, dossierClaude = process.env.SIEGE_CLAUDE_DIR || pa
     for (const e of (await liste(dir)).filter(e => e.endsWith('.jsonl'))) {
       const id = e.slice(0, -6), st = await stat(path.join(dir, e)); if (!st) continue;
       const live = ouvertes.get(id);
-      if (!live && maintenant - st.mtimeMs > HORIZON_MS) continue;
-      sessions.push({ id, vivante: !!live, occupee: !!live && live.status === 'busy', derniere: Math.max(st.mtimeMs, (live && live.statusUpdatedAt) || 0) });
+      // Session de terminal sans enregistrement dans ~/.claude/sessions : vivante si elle a écrit récemment
+      const recente = !live && maintenant - st.mtimeMs < SANS_ENREGISTREMENT_MS;
+      const vivante = !!live || recente;
+      if (!vivante && maintenant - st.mtimeMs > HORIZON_MS) continue;
+      sessions.push({ id, vivante, occupee: !!live && live.status === 'busy', derniere: Math.max(st.mtimeMs, (live && live.statusUpdatedAt) || 0) });
       const sdir = path.join(dir, id, 'subagents');
       for (const f of (await liste(sdir)).filter(f => f.endsWith('.meta.json'))) {
         const aid = f.slice(0, -10), meta = await lireJson(path.join(sdir, f)); if (!meta) continue;
@@ -57,7 +61,7 @@ async function lire({ racine, dossierClaude = process.env.SIEGE_CLAUDE_DIR || pa
         missions.push({
           id: aid, session: id, agent: meta.agentType || 'agent', resume: meta.description || '',
           filiale: fil ? fil[1].trim() : '', story: sto ? sto[1] : '',
-          etat: meta.finished ? 'termine' : !live ? 'interrompu' : maintenant - mt < ACTIF_MS ? 'au_poste' : 'en_attente',
+          etat: meta.finished ? 'termine' : !(live || recente) ? 'interrompu' : maintenant - mt < ACTIF_MS ? 'au_poste' : 'en_attente',
           derniere: mt
         });
       }
