@@ -21,8 +21,8 @@ const refus = m => { throw new ErreurBacklog(m); };
 
 const fichier = racine => path.join(racine, 'droits', 'autorisations.json');
 function lire(racine) {
-  try { const j = JSON.parse(fs.readFileSync(fichier(racine), 'utf8')); return { sandbox_obligatoire: j.sandbox_obligatoire !== false, liste: Array.isArray(j.liste) ? j.liste : [] }; }
-  catch { return { sandbox_obligatoire: true, liste: [] }; }
+  try { const j = JSON.parse(fs.readFileSync(fichier(racine), 'utf8')); return { sandbox_obligatoire: j.sandbox_obligatoire !== false, liste: Array.isArray(j.liste) ? j.liste : [], journalAgents: require('./journal-agents').normaliserReglages(j.journalAgents) }; }
+  catch { return { sandbox_obligatoire: true, liste: [], journalAgents: require('./journal-agents').normaliserReglages() }; }
 }
 function ecrireAtomique(f, contenu) { const t = f + '.' + process.pid + '.tmp'; fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(t, contenu); fs.renameSync(t, f); }
 
@@ -56,7 +56,7 @@ function settings(racine) {
       network: { allowedDomains: [...new Set([...DOMAINES_BASE, ...domainesGithub(racine), ...de('domaine')])] },
       filesystem: {
         denyRead: ['~/.siege', '~/.ssh', '~/.aws', '~/.config/gh', '~/.netrc'],
-        denyWrite: ['./droits', './.claude', './siege', './portfolio/features.json', './portfolio/bugs.json', './portfolio/commentaires.json', './portfolio/source-backlog.json']
+        denyWrite: ['~/.siege', './droits', './.claude', './siege', './portfolio/features.json', './portfolio/bugs.json', './portfolio/commentaires.json', './portfolio/source-backlog.json']
       },
       credentials: { envVars: ['NOTION_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN', 'ANTHROPIC_API_KEY'].map(name => ({ name, mode: 'deny' })) }
     }

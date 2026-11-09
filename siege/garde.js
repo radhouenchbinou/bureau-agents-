@@ -45,6 +45,22 @@ function designerMainteneur(id) {
   const f = fichierMainteneurs(); fs.mkdirSync(path.dirname(f), { recursive: true, mode: 0o700 });
   const t = f + '.' + process.pid + '.tmp'; fs.writeFileSync(t, JSON.stringify(l, null, 1), { mode: 0o600 }); fs.renameSync(t, f);
 }
+// Journal par agent (EIA-017) : écrit APRÈS la décision, jamais d'exception ni d'effet sur le code de sortie
+const motifDe = (h, d) => String(d.motif || (h.tool_input || {}).command || (h.tool_input || {}).file_path || (h.tool_input || {}).path || (h.tool_input || {}).url || '').slice(0, 300);
+function journalAgent(h, role, f) {
+  try {
+    if (role === 'directeur' && !process.env.SIEGE_EXECUTION) return;
+    const J = require('./lib/journal-agents'), c = J.rattacher(role, { execution: process.env.SIEGE_EXECUTION, session: h.session_id, agentId: h.agent_id, hook: h });
+    if (c) f(J, c);
+  } catch {}
+}
+function ouvrirSousAgent(h, hn) {
+  try {
+    const J = require('./lib/journal-agents'), e = hn.tool_input || {}, t = String(e.prompt || '');
+    J.ouvrir({ role: e.subagent_type || e.agent_type, filiale: (/Filiale\s*:\s*([^\n—–-]+?)\s*(?:[—–-]|\n|$)/.exec(t) || [])[1], ticket: (/^\s*Ticket\s*:\s*([A-Z]{3}-\d{3}|BUG-\d{3})\b/mi.exec(t) || [])[1],
+      etape: ((/^\s*[ÉE]tape\s*:\s*(.+)$/mi.exec(t) || [])[1] || '').trim(), moteur: 'claude', modele: e.model || '', hote: { pid: process.ppid, session: h.session_id }, empreinte: J.empreinteDe(t) });
+  } catch {}
+}
 function bloquer(message) { process.stderr.write(message + '\n'); process.exit(2); }
 
 let brut = '';
@@ -76,6 +92,8 @@ process.stdin.on('end', () => {
     const ex = require('./lib/exceptions');
     if (h.hook_event_name === 'SubagentStop') {
       for (const e of ex.terminerPourAgent(role)) journal({ evenement: 'exception_terminee', role, exception: e.id });
+      // Clôture de l'entrée du journal : l'agent s'est arrêté normalement (Claude Code ne donne pas de code d'échec)
+      journalAgent(h, role, (J, c) => J.clore(role, c.id, { code: 0, sortie: h.last_assistant_message || J.dernierMessage(J.historiqueSousAgent(h)) }));
       return process.exit(0);
     }
     const garde = require('./lib/garde');
@@ -103,8 +121,13 @@ process.stdin.on('end', () => {
       }
     }
     if (!d.ok && d.refusIdentite) refusIdentite({ role, ...d.refusIdentite });
-    if (d.ok) { if (d.exception) { ex.noterUsage(d.exception); journal({ evenement: 'exception_utilisee', role, outil: h.tool_name, exception: d.exception }); } return process.exit(0); }
+    if (d.ok) {
+      if (d.exception) { ex.noterUsage(d.exception); journal({ evenement: 'exception_utilisee', role, outil: h.tool_name, exception: d.exception }); journalAgent(h, role, (J, c) => J.evenement(role, c.id, { nature: 'exception_utilisee', outil: h.tool_name, motif: motifDe(hn, d), exception: d.exception, incertain: c.incertain })); }
+      if (hn.tool_name === 'Agent') ouvrirSousAgent(h, hn);
+      return process.exit(0);
+    }
     journal({ evenement: 'refus', role, outil: h.tool_name, raison: d.raison, type: d.type || '', motif: d.motif || '' });
+    journalAgent(h, role, (J, c) => J.evenement(role, c.id, { nature: 'refus', outil: h.tool_name, motif: motifDe(hn, d), raison: d.raison, incertain: c.incertain }));
     bloquer(`Refusé par la garde du Siège — ${d.raison}.` + (d.type
       ? ` Si cette action est indispensable à ta tâche, arrête-toi et demande une exception au directeur : type « ${d.type} », motif « ${String(d.motif).slice(0, 200)} », avec ta justification. Ne cherche pas de contournement.`
       : ' Cette limite ne fait pas l\'objet d\'exception.'));

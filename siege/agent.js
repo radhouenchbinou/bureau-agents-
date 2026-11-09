@@ -48,6 +48,10 @@ Ton rôle (référence)
 ${defRole.slice(0, 6000)}`;
 }
 
+// Journal par agent (EIA-017) : jamais d'exception ni d'effet sur le lancement (R8)
+const ouvrirJournal = (o, f, moteur, modele) => { try { return require('./lib/journal-agents').ouvrir({ role: o.role, filiale: f.nom, ticket: o.ticket, etape: o.etape, moteur, modele }); } catch { return null; } };
+const fermerJournal = (id, o, debut, { code, sortie, interrompu }) => { try { if (id) require('./lib/journal-agents').clore(o.role, id, { code, sortie, duree: (Date.now() - debut) / 1000, etat: interrompu ? 'interrompu' : undefined }); } catch {} };
+
 async function lancer(o) {
   const nomMoteur = o.moteur || '', liste = await moteurs.detecter(), m = liste.find(x => x.nom === nomMoteur);
   if (!m || !moteurs.MOTEURS[nomMoteur].externe) refus('Moteur externe attendu : ' + liste.filter(x => x.externe).map(x => x.nom).join(', '));
@@ -73,12 +77,14 @@ async function lancer(o) {
   const args = ['exec', '-m', mod.id, '-C', dossier, '-s', 'workspace-write', '-c', 'sandbox_workspace_write.network_access=false',
     '--skip-git-repo-check', '--ephemeral', '--ignore-user-config', '--color', 'never', '-o', dernier,
     consigne({ role: o.role, filiale: f, ticket: o.ticket, etape: o.etape, mission, moteur: `${m.libelle} (${mod.id})` })];
-  const debut = Date.now();
+  const debut = Date.now(), jid = ouvrirJournal(o, f, nomMoteur, mod.id); let sortie = '', coupe = false;
   const code = await new Promise((ok, ko) => {
-    const p = spawn(moteurs.MOTEURS[nomMoteur].bin(), args, { cwd: dossier, stdio: ['ignore', journal, journal] });
-    const t = setTimeout(() => p.kill('SIGTERM'), DUREE_MAX_MS);
-    p.on('error', e => { clearTimeout(t); ko(new ErreurAgent(`${m.libelle} n'a pas pu démarrer : ${e.message}`)); });
-    p.on('exit', c => { clearTimeout(t); ok(c); });
+    // stdout passe en pipe pour être recopié dans agents-externes.log (inchangé) et dans le journal par agent
+    const p = spawn(moteurs.MOTEURS[nomMoteur].bin(), args, { cwd: dossier, stdio: ['ignore', 'pipe', journal] });
+    p.stdout.on('data', d => { fs.writeSync(journal, d); sortie = (sortie + d).slice(-20000); });
+    const t = setTimeout(() => { coupe = true; p.kill('SIGTERM'); }, DUREE_MAX_MS);
+    p.on('error', e => { clearTimeout(t); fermerJournal(jid, o, debut, { code: null, sortie: e.message }); ko(new ErreurAgent(`${m.libelle} n'a pas pu démarrer : ${e.message}`)); });
+    p.on('close', c => { clearTimeout(t); fermerJournal(jid, o, debut, { code: c, sortie, interrompu: coupe }); ok(c); });
   });
   fs.closeSync(journal);
   let passation = ''; try { passation = fs.readFileSync(dernier, 'utf8').trim(); fs.unlinkSync(dernier); } catch {}
@@ -98,14 +104,15 @@ async function copilot({ m, mod, o, f, dossier, prive, mission }) {
   const args = [...x.avant, '-p', consigne({ role: o.role, filiale: f, ticket: o.ticket, etape: o.etape, mission, moteur: `${m.libelle} (${mod.id})` }),
     '--agent', o.role, '--add-dir', RACINE, '--model', mod.id, '--silent', '--no-ask-user', '--trust-folder',
     '--allow-tool', 'write', '--allow-tool', 'shell', '--deny-tool', 'url'];
-  const env = { ...copilote.env(), SIEGE_RACINE: RACINE, SIEGE_ROLE: o.role, SIEGE_PRIVE: prive, SIEGE_SESSION_AUTO: '1' };
-  const debut = Date.now(); let sortie = '';
+  const debut = Date.now(), jid = ouvrirJournal(o, f, 'copilot', mod.id);
+  const env = { ...copilote.env(), SIEGE_RACINE: RACINE, SIEGE_ROLE: o.role, SIEGE_PRIVE: prive, SIEGE_SESSION_AUTO: '1', ...(jid ? { SIEGE_EXECUTION: jid } : {}) };
+  let sortie = '', coupe = false;
   const code = await new Promise((ok, ko) => {
     const p = spawn(x.cmd, args, { cwd: dossier, env, stdio: ['ignore', 'pipe', journal], windowsHide: true });
     p.stdout.on('data', d => { sortie += d; fs.writeSync(journal, d); });
-    const t = setTimeout(() => p.kill('SIGTERM'), DUREE_MAX_MS);
-    p.on('error', e => { clearTimeout(t); ko(new ErreurAgent(`${m.libelle} n'a pas pu démarrer : ${e.message}`)); });
-    p.on('exit', c => { clearTimeout(t); ok(c); });
+    const t = setTimeout(() => { coupe = true; p.kill('SIGTERM'); }, DUREE_MAX_MS);
+    p.on('error', e => { clearTimeout(t); fermerJournal(jid, o, debut, { code: null, sortie: e.message }); ko(new ErreurAgent(`${m.libelle} n'a pas pu démarrer : ${e.message}`)); });
+    p.on('close', c => { clearTimeout(t); fermerJournal(jid, o, debut, { code: c, sortie, interrompu: coupe }); ok(c); });
   });
   fs.closeSync(journal);
   const passation = sortie.trim().split('\n').slice(-40).join('\n'), duree = Math.round((Date.now() - debut) / 1000);
