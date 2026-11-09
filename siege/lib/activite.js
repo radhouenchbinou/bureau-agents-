@@ -44,24 +44,37 @@ async function lire({ racine, dossierClaude = process.env.SIEGE_CLAUDE_DIR || pa
   const sessions = [], missions = [];
   for (const d of dossiers) {
     const dir = path.join(projets, d);
-    for (const e of (await liste(dir)).filter(e => e.endsWith('.jsonl'))) {
-      const id = e.slice(0, -6), st = await stat(path.join(dir, e)); if (!st) continue;
+    // Sessions à historique (.jsonl) + sessions sans historique qui ont des sous-agents (ex. missions lancées depuis un terminal)
+    const entrees = await liste(dir), ids = new Map();
+    for (const e of entrees.filter(e => e.endsWith('.jsonl'))) { const st = await stat(path.join(dir, e)); if (st) ids.set(e.slice(0, -6), { st, jsonl: true }); }
+    for (const e of entrees) {
+      if (e.endsWith('.jsonl') || ids.has(e)) continue;
+      const sd = path.join(dir, e, 'subagents'), st = await stat(sd);
+      if (st && (await liste(sd)).some(f => f.endsWith('.meta.json'))) ids.set(e, { st, jsonl: false });
+    }
+    for (const [id, { st, jsonl }] of ids) {
       const live = ouvertes.get(id);
       // Session de terminal sans enregistrement dans ~/.claude/sessions : vivante si elle a écrit récemment
       const recente = !live && maintenant - st.mtimeMs < SANS_ENREGISTREMENT_MS;
       const vivante = !!live || recente;
       if (!vivante && maintenant - st.mtimeMs > HORIZON_MS) continue;
-      sessions.push({ id, vivante, occupee: !!live && live.status === 'busy', derniere: Math.max(st.mtimeMs, (live && live.statusUpdatedAt) || 0) });
+      // Seules les sessions à historique peuvent être le directeur
+      if (jsonl) sessions.push({ id, vivante, occupee: !!live && live.status === 'busy', derniere: Math.max(st.mtimeMs, (live && live.statusUpdatedAt) || 0) });
       const sdir = path.join(dir, id, 'subagents');
       for (const f of (await liste(sdir)).filter(f => f.endsWith('.meta.json'))) {
         const aid = f.slice(0, -10), meta = await lireJson(path.join(sdir, f)); if (!meta) continue;
-        const jf = path.join(sdir, aid + '.jsonl'), ast = await stat(jf), mt = ast ? ast.mtimeMs : 0;
+        const jf = path.join(sdir, aid + '.jsonl'), ast = await stat(jf), mst = await stat(path.join(sdir, f));
+        // Sans historique du sous-agent (mission tout juste lancée), on prend la date du fichier meta
+        const mt = ast ? ast.mtimeMs : mst ? mst.mtimeMs : 0;
         if (maintenant - mt > HORIZON_MS) continue;
-        const txt = ast ? await consigne(jf) : '', fil = FILIALE.exec(txt), sto = STORY.exec(txt);
+        const txt = ast ? await consigne(jf) : '', src = txt || meta.description || '';
+        const fil = FILIALE.exec(src), sto = STORY.exec(src);
         missions.push({
           id: aid, session: id, agent: meta.agentType || 'agent', resume: meta.description || '',
           filiale: fil ? fil[1].trim() : '', story: sto ? sto[1] : '',
-          etat: meta.finished ? 'termine' : !(live || recente) ? 'interrompu' : maintenant - mt < ACTIF_MS ? 'au_poste' : 'en_attente',
+          etat: meta.finished ? 'termine'
+            : !jsonl ? (maintenant - mt > SANS_ENREGISTREMENT_MS ? 'interrompu' : maintenant - mt < ACTIF_MS ? 'au_poste' : 'en_attente')
+            : !(live || recente) ? 'interrompu' : maintenant - mt < ACTIF_MS ? 'au_poste' : 'en_attente',
           derniere: mt
         });
       }
