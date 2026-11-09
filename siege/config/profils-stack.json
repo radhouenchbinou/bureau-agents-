@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "_lisez_moi": "Profils de stack (N18) : image d'exécution, commandes autorisées pour build, test, lint et scan, chemins sensibles par défaut. Les types d'agents se déclarent ici et renvoient à un profil. Ajouter une stack = ajouter un profil, sans changer le code.",
+  "profils": {
+    "java-spring": {
+      "libelle": "Java / Spring Boot",
+      "image": "eclipse-temurin:21-jdk",
+      "build": ["mvn -q package", "mvn -q compile", "./mvnw -q package", "gradle build", "./gradlew build"],
+      "test": ["mvn -q test", "mvn -q verify", "./mvnw -q test", "gradle test", "./gradlew test"],
+      "lint": ["mvn -q checkstyle:check"],
+      "scan": ["mvn -q org.owasp:dependency-check-maven:check"],
+      "chemins_sensibles": ["src/main/resources/application*.yml", "**/*.pem", "**/.env"]
+    },
+    "node-ts": {
+      "libelle": "Node / TypeScript",
+      "image": "node:22-slim",
+      "build": ["npm run build", "npx tsc", "npm run compile"],
+      "test": ["npm test", "npm run test", "node --test"],
+      "lint": ["npx eslint .", "npm run lint"],
+      "scan": ["npm audit --audit-level=high"],
+      "chemins_sensibles": [".env", ".env.*", "**/*.pem"]
+    },
+    "python": {
+      "libelle": "Python",
+      "image": "python:3.12-slim",
+      "build": ["python3 -m build", "pip install -e ."],
+      "test": ["pytest", "python3 -m pytest", "python3 -m unittest discover"],
+      "lint": ["ruff check .", "mypy ."],
+      "scan": ["pip-audit", "bandit -r ."],
+      "chemins_sensibles": [".env", "**/*.pem", "**/secrets*.py"]
+    }
+  },
+  "types_agents": {
+    "dev-java": { "libelle": "Développeur Java", "profil": "java-spring" },
+    "dev-node": { "libelle": "Développeur Node / TypeScript", "profil": "node-ts" },
+    "dev-python": { "libelle": "Développeur Python", "profil": "python" }
+  }
+}
