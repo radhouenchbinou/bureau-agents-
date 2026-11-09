@@ -38,7 +38,9 @@ Les rôles d'une filiale sont **génériques** : les mêmes agents servent toute
 - Claude Code installé et connecté (`claude` dans un terminal).
 - Node.js 18.17 ou plus (le Siège et l'outil backlog n'ont **aucune dépendance npm**).
 - Git.
-- Facultatif : un compte Notion.
+- Linux : `bubblewrap` et `socat` (bac à sable des agents ; `sudo apt install bubblewrap socat`). macOS : rien à installer.
+  Sans bac à sable, Claude Code refuse de démarrer dans le Siège (`failIfUnavailable`).
+- Facultatif : Notion ou Jira (backlog), une App GitHub, un bot Telegram.
 
 ## Démarrer en 5 minutes
 
