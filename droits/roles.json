@@ -25,7 +25,11 @@
       "**/*.env",
       "**/*.pem",
       "**/.git/**",
-      "~/**"
+      "~/.ssh/**",
+      "~/.aws/**",
+      "~/.siege/**",
+      "~/.config/gh/**",
+      "~/.netrc"
     ],
     "bash": [
       "^node siege/backlog\\.js (aide|source|file|liste|voir|commentaires|questions)\\b",
