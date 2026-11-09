@@ -5,6 +5,7 @@
 'use strict';
 const ex = require('./lib/exceptions');
 const { options, ErreurSiege } = require('./lib/options');
+const identite = require('./lib/identite'), journal = require('./lib/journal');
 
 const AIDE = `Exceptions — usage : node siege/exception.js <commande>
 
@@ -20,6 +21,7 @@ const ligne = e => `${e.id} [${e.statut}] ${e.agent}${e.ticket ? ' · ' + e.tick
 
 function main(argv) {
   const [cmd, ...a] = argv, { o, reste: r } = options(a);
+  const acteur = identite.resoudre({ outil: 'exception', args: argv });
   switch (cmd) {
     case undefined: case 'aide': console.log(AIDE); return;
     case 'liste': { const l = ex.lire().liste.filter(e => !o.statut || e.statut === o.statut); if (!l.length) console.log('Aucune exception.'); l.forEach(e => console.log(ligne(e))); return; }
@@ -27,7 +29,9 @@ function main(argv) {
     case 'demander': { const e = ex.demander({ agent: o.agent, ticket: o.ticket, type: o.type, motif: o.motif, justification: o.justification }); console.log('Demande enregistrée : ' + ligne(e) + '\nÀ faire valider par le CEO (Siège › Exceptions, ou node siege/exception.js accorder ' + e.id + ').'); return; }
     case 'activer': { const e = ex.activer(r[0]); console.log('Active : ' + ligne(e) + '\nElle se fermera quand ' + e.agent + ' aura terminé sa tâche.'); return; }
     case 'terminer': { const e = ex.terminer(r[0]); console.log('Terminée : ' + e.id); return; }
-    case 'accorder': case 'refuser': { const e = ex.decider(r[0], cmd === 'accorder', o.commentaire); console.log((cmd === 'accorder' ? 'Accordée : ' : 'Refusée : ') + e.id); return; }
+    case 'accorder': case 'refuser': {
+      if (!acteur.humain) { journal.refusIdentite({ role: acteur.role, demande: cmd, outil: 'exception', sous_commande: cmd }); throw new identite.ErreurIdentite('Seul le CEO accorde ou refuse une exception'); }
+      const e = ex.decider(r[0], cmd === 'accorder', o.commentaire); console.log((cmd === 'accorder' ? 'Accordée : ' : 'Refusée : ') + e.id); return; }
     default: throw new ex.ErreurException('Commande inconnue : ' + cmd + '\n\n' + AIDE);
   }
 }

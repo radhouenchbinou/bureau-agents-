@@ -6,6 +6,7 @@
 const fs = require('fs'), path = require('path');
 const { filiales } = require('./lib/registre');
 const { options, ErreurSiege } = require('./lib/options');
+const identite = require('./lib/identite');
 
 const RACINE = process.env.SIEGE_RACINE || path.resolve(__dirname, '..');
 const REGISTRE = path.join(RACINE, 'portfolio', 'filiales.md');
@@ -48,6 +49,7 @@ async function ajouter(o) {
 
 async function main(argv) {
   const [cmd, ...a] = argv, { o } = options(a);
+  identite.resoudre({ outil: 'filiale', args: argv });
   if (!cmd || cmd === 'aide') return console.log(AIDE);
   if (cmd === 'liste') return (await filiales(REGISTRE)).forEach(f => console.log(`${f.prefixe}  ${f.nom.padEnd(16)} ${f.dossier}  (repo ${f.repo || '—'})`));
   if (cmd === 'ajouter') { const r = await ajouter(o); return console.log(`Filiale ${r.nom} (${r.prefixe}) intégrée : fiche ${r.dossier}/CLAUDE.md, docs/, registre mis à jour.`); }

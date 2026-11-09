@@ -1,4 +1,5 @@
 'use strict';
+require('./_humain');
 // Intégration Notion de bout en bout contre un faux serveur : init des bases, import, CLI des agents, commentaires.
 const test = require('node:test'), assert = require('node:assert'), fs = require('fs'), os = require('os'), path = require('path');
 const { demarrer, JETON } = require('./faux-notion');

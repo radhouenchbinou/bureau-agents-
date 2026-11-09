@@ -5,6 +5,7 @@
 const path = require('path');
 const gh = require('./lib/github');
 const { options, ErreurSiege } = require('./lib/options');
+const identite = require('./lib/identite');
 const { filiales } = require('./lib/registre');
 const garde = require('./lib/garde');
 const cfgBacklog = require('./lib/config');
@@ -24,6 +25,7 @@ const CONTEXTE_DU_ROLE = { reviewer: 'revue', 'rssi-devsecops': 'securite' };
 
 async function main(argv) {
   const [cmd, ...a] = argv, { o } = options(a);
+  const acteur = identite.resoudre({ outil: 'github', args: argv });
   if (!cmd || cmd === 'aide') return console.log(AIDE);
   const politique = garde.charger(RACINE), c = gh.config(RACINE), fil = await filiales(path.join(RACINE, 'portfolio', 'filiales.md'));
   if (cmd === 'etat') {
@@ -31,7 +33,8 @@ async function main(argv) {
     for (const f of fil) console.log(`  ${f.nom.padEnd(12)} ${f.repo.padEnd(22)} → ${(c.repos || {})[f.repo] || '(aucun repo GitHub)'}`);
     return;
   }
-  const role = o.role; if (!role) throw new gh.ErreurGithub('--role obligatoire');
+  // Agent : le rôle est celui que la garde impose (--role facultatif, égal sinon refus) ; humain : --role obligatoire
+  const role = identite.imposer(acteur, o.role, { outil: 'github', sous_commande: cmd }); if (!role) throw new gh.ErreurGithub('--role obligatoire');
   if (cmd === 'fusionner' && o.ticket !== undefined) return livraisonGroupee(o, role, c, politique, fil);
   const { filiale, repo } = gh.repoDeFiliale(c, fil, o.filiale);
   const jeton = await gh.jetonRole(c, politique, role, repo);
@@ -103,4 +106,12 @@ async function livraisonGroupee(o, role, c, politique, fil) {
 }
 
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof gh.ErreurGithub || e instanceof ErreurSiege ? 'Erreur : ' + e.message : 'Erreur : ' + (e.message || e)); process.exit(1); });
-module.exports = { main };
+// Pousse la branche d'une filiale avec le jeton du rôle (appelé en processus par agent.js : un sous-processus de cet outil
+// serait refusé faute d'entrée d'identité)
+async function pousserBranche({ racine = RACINE, role, filiale: nom, branche }) {
+  const politique = garde.charger(racine), c = gh.config(racine), fil = await filiales(path.join(racine, 'portfolio', 'filiales.md'));
+  const { filiale, repo } = gh.repoDeFiliale(c, fil, nom);
+  gh.pousser(path.join(racine, filiale.repo), repo, branche || '', await gh.jetonRole(c, politique, role, repo));
+  return `Branche ${branche} poussée sur ${repo}`;
+}
+module.exports = { main, pousserBranche };

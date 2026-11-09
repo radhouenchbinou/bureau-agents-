@@ -4,6 +4,7 @@
 // il ne donne jamais d'ordre au directeur.
 'use strict';
 const { options, ErreurSiege } = require('./lib/options');
+const identite = require('./lib/identite');
 const dem = require('./lib/demandes'), tg = require('./lib/telegram'), sl = require('./lib/slack'), canaux = require('./lib/canaux');
 
 const AIDE = `Demandes — usage : node siege/demande.js <commande>
@@ -41,6 +42,7 @@ async function direCeo(texte, boutons, fil) {
 
 async function main(argv) {
   const [cmd, ...a] = argv, { o, reste: r } = options(a), id = r[0];
+  identite.resoudre({ outil: 'demande', args: argv });      // agent sans identité imposée : refus (échec fermé)
   switch (cmd) {
     case undefined: case 'aide': return console.log(AIDE);
     case 'liste': { const l = dem.lire().liste.filter(x => !('ouvertes' in o) || dem.ouverte(x)); if (!l.length) console.log('Aucune demande.'); l.forEach(x => console.log(ligne(x))); return; }

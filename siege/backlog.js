@@ -18,6 +18,7 @@ async function questionsOuvertes() {
   return out;
 }
 const { options, ErreurSiege } = require('./lib/options');
+const identite = require('./lib/identite');
 const { creerBases, idDepuisLien } = require('./lib/notion');
 const jira = require('./lib/jira');
 const { filiales } = require('./lib/registre');
@@ -62,6 +63,7 @@ async function prefixeDe(nom) {
 
 async function main(argv) {
   const [cmd, ...args] = argv, { o, reste } = options(args);
+  const acteur = identite.resoudre({ outil: 'backlog', args: argv });      // agent : rôle imposé par la garde ; humain : usage actuel
   if ('pr' in o) throw new ErreurBacklog('Le champ PR est tenu par node siege/github.js pr --ticket <ID> (jamais à la main)');
   switch (cmd) {
     case undefined: case 'aide': case '--help': console.log(AIDE); return;
@@ -116,7 +118,10 @@ async function main(argv) {
     case 'supprimer': { await cfg.source(collectionDe(reste[0])).supprimer(reste[0]); console.log('Supprimé : ' + reste[0]); return; }
     case 'commenter': {
       const id = reste[0]; if (!id) throw new ErreurBacklog('commenter <ID> --auteur <agent> --texte "…" [--question]');
-      const c = await cfg.source(collectionDe(id)).commenter(id, { auteur: o.auteur || 'CEO', type: 'question' in o ? 'question' : o.auteur && o.auteur !== 'CEO' ? 'suivi' : 'reponse', texte: o.texte });
+      // Agent : auteur = rôle imposé (jamais `reponse`, réservée au canal humain) ; humain : logique d'origine
+      const auteur = acteur.humain ? o.auteur || 'CEO' : identite.imposer(acteur, o.auteur, { outil: 'backlog', sous_commande: 'commenter' });
+      const type = 'question' in o ? 'question' : !acteur.humain || (o.auteur && o.auteur !== 'CEO') ? 'suivi' : 'reponse';
+      const c = await cfg.source(collectionDe(id)).commenter(id, { auteur, type, texte: o.texte });
       console.log('Commentaire ajouté sur ' + id + ' : [' + c.type + '] ' + c.texte); return;
     }
     case 'commentaires': {
