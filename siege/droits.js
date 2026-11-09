@@ -33,7 +33,9 @@ async function ecarts() {
 }
 
 async function appliquer({ silencieux = false } = {}) {
-  const p = politique(), agents = new Agents(path.join(RACINE, '.claude', 'agents'));
+  const p = politique(), reserves = require('./lib/identite').rolesReserves(p);
+  if (reserves.length) throw new Error('Rôle d\'agent nommé comme une identité humaine (commun.identites_humaines) : ' + reserves.join(', '));
+  const agents = new Agents(path.join(RACINE, '.claude', 'agents'));
   for (const a of await agents.lister()) {
     if (!p.roles[a.nom]) continue;
     const e = attendu(p, a.nom);

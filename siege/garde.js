@@ -8,12 +8,7 @@
 const fs = require('fs'), path = require('path'), os = require('os');
 const RACINE = path.resolve(__dirname, '..');
 
-function journal(ligne) {
-  try {
-    const d = process.env.SIEGE_PRIVE || path.join(os.homedir(), '.siege'); fs.mkdirSync(d, { recursive: true, mode: 0o700 });
-    fs.appendFileSync(path.join(d, 'journal-garde.jsonl'), JSON.stringify({ date: new Date().toISOString(), ...ligne }) + '\n', { mode: 0o600 });
-  } catch {}
-}
+const { journal, refusIdentite } = require('./lib/journal');
 // Liaison session du directeur → (ticket, étape), gardée 7 jours dans ~/.siege/sessions-etapes.json
 // Modèle d'un sous-agent Claude Code (paramètre de l'appel, sinon celui de sa définition) : activé par le CEO ?
 function modeleAutorise(h) {
@@ -63,6 +58,14 @@ process.stdin.on('end', () => {
         d = mission(garde, { ...h, tool_input: { prompt: `Ticket : ${v('ticket')}\nÉtape : ${v('etape')}` } });
       }
     }
+    // Identité imposée (EIA-001) : un segment « node siege/<outil>.js » autorisé dépose l'entrée que l'outil consommera
+    if (d.ok && hn.tool_name === 'Bash') {
+      const identite = require('./lib/identite');
+      for (const mots of garde.outilsSiege((hn.tool_input || {}).command)) {
+        const m = identite.deposer(role, mots); if (m) { d = { ok: false, raison: m }; break; }
+      }
+    }
+    if (!d.ok && d.refusIdentite) refusIdentite({ role, ...d.refusIdentite });
     if (d.ok) { if (d.exception) { ex.noterUsage(d.exception); journal({ evenement: 'exception_utilisee', role, outil: h.tool_name, exception: d.exception }); } return process.exit(0); }
     journal({ evenement: 'refus', role, outil: h.tool_name, raison: d.raison, type: d.type || '', motif: d.motif || '' });
     bloquer(`Refusé par la garde du Siège — ${d.raison}.` + (d.type

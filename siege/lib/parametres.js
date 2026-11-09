@@ -31,6 +31,7 @@ function settings(racine) {
   const crochet = cmd => [{ matcher: '*', hooks: [{ type: 'command', command: cmd }] }];
   return {
     _genere_par: 'node siege/droits.js — ne pas modifier à la main : Siège › Droits',
+    env: { SIEGE_CONTEXTE: 'agent' },   // marqueur d'appel d'agent : l'identité est alors imposée par la garde (EIA-001)
     permissions: {
       deny: ['Read(~/.siege/**)', 'Read(~/.ssh/**)', 'Read(~/.aws/**)', 'Read(~/.config/gh/**)', 'Edit(/droits/**)', 'Edit(/.claude/**)', 'Edit(/siege/**)'],   // Edit couvre tous les outils d'écriture
       allow: ['Bash(node siege/backlog.js:*)']
