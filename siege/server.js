@@ -13,6 +13,7 @@ const { creerBases, idDepuisLien } = require('./lib/notion');
 const { questionsOuvertes } = require('./backlog');
 const exceptions = require('./lib/exceptions'), parametres = require('./lib/parametres'), skills = require('./lib/skills'), droits = require('./droits');
 const fs = require('fs'), os = require('os');
+const jira = require('./lib/jira'), integrations = require('./lib/integrations'), gh = require('./lib/github');
 
 // Derniers événements de la garde (refus, exceptions utilisées ou terminées), du plus récent au plus ancien
 function journalGarde(n = 40) {
@@ -59,7 +60,8 @@ async function etat() {
   const s = cfg.lireSource();
   return {
     csrf: CSRF, genere: Date.now(), racine: cfg.F.racine,
-    source: { type: s.type, jeton: !!cfg.jeton(), configure: s.type !== 'notion' || !!(s.bases && s.bases.features && s.bases.bugs) },
+    source: { type: s.type, jeton: s.type === 'jira' ? !!cfg.jetonJira() : !!cfg.jeton(), configure: s.type === 'notion' ? !!(s.bases && s.bases.features && s.bases.bugs) : s.type === 'jira' ? !!(s.champs && s.champs.ID) : true },
+    integrations: integrations.vue({ racine: cfg.F.racine, prive: cfg.F.prive, source: s, jetonNotion: cfg.jeton(), jetonJira: cfg.jetonJira(), filiales: fil }),
     schemas: Object.fromEntries(Object.entries(COLLECTIONS).map(([n, c]) => [n, { libelle: c.libelle, champs: c.champs }])), etapes: ETAPES,
     filiales: fil, agents: ag, rolesFiliale: ROLES_FILIALE, modeles: MODELES, outils: OUTILS,
     features: f, bugs: b, file: file(f.elements, b.elements), activite: act, questions: await questionsEnAttente(),
@@ -128,18 +130,42 @@ async function action(op) {
       const fil = (await filiales(cfg.F.filiales)).map(f => f.nom), locales = cfg.sourcesLocales();
       const jalons = [...new Set((await locales.features.lister()).map(e => e.jalon).filter(Boolean))];
       const bases = await creerBases({ jeton: cfg.jeton(), pageParente: page, filiales: fil, jalons });
-      await cfg.ecrireSource({ type: 'notion', page, bases }); return { bases };
+      await cfg.ecrireSource({ ...s, type: 'notion', page, bases }); return { bases };
     }
+    // Jira : jeton gardé dans ~/.siege ; l'initialisation crée les champs « Siège … » (droits d'admin Jira) et active Jira
+    case 'jira.jeton': await cfg.enregistrerJetonJira(op.jeton); return { ok: true };
+    case 'jira.init': {
+      const c = jira.verifierConfig({ type: 'jira', url: String(op.url || '').trim(), mode: op.mode, email: String(op.email || '').trim(), projet: String(op.projet || '').trim().toUpperCase(),
+        etiquette: String(op.etiquette || 'bureau-ia').trim(), types: { features: String(op.typeFeature || 'Story').trim(), bugs: String(op.typeBug || 'Bug').trim() }, restreindre: !!op.restreindre,
+        statuts: Object.fromEntries(Object.entries(op.statuts || {}).filter(([k, v]) => COLLECTIONS.features.champs.statut.options.concat(COLLECTIONS.bugs.champs.statut.options).includes(k) && typeof v === 'string' && v.trim()).map(([k, v]) => [k, v.trim().slice(0, 60)])) });
+      const r = await jira.initialiser(c, cfg.jetonJira());
+      const { bases, page } = cfg.lireSource();
+      await cfg.ecrireSource({ ...r.config, ...(bases ? { bases, page } : {}) });
+      return { moi: r.moi, crees: r.crees, avertissements: r.avertissements };
+    }
+    case 'source.jira': {
+      const s = cfg.lireSource(); if (!(s.champs && s.champs.ID)) refus('Initialisez Jira d\'abord');
+      await cfg.ecrireSource({ ...s, type: 'jira' }); return { ok: true };
+    }
+    case 'source.notion': {
+      const s = cfg.lireSource(); if (!(s.bases && s.bases.features)) refus('Créez d\'abord les bases Notion');
+      await cfg.ecrireSource({ ...s, type: 'notion' }); return { ok: true };
+    }
+    // App GitHub : identifiants et repos par filiale (portfolio/github.json), clé privée dans ~/.siege (600)
+    case 'github.config': return integrations.configurerGithub(cfg.F.racine, await filiales(cfg.F.filiales), op);
+    case 'github.cle': integrations.enregistrerCle(cfg.F.prive, op.pem); return { ok: true };
+    case 'github.tester': return integrations.testerGithub(cfg.F.racine);
+    case 'backlog.importer':
     case 'notion.importer': {
-      if (cfg.lireSource().type !== 'notion') refus('Configurez Notion d\'abord');
+      if (!['notion', 'jira'].includes(cfg.lireSource().type)) refus('Branchez Notion ou Jira d\'abord');
       const locales = cfg.sourcesLocales(), bilan = {};
       for (const c of Object.keys(COLLECTIONS)) {
         const cible = cfg.source(c), deja = new Set((await cible.lister()).map(e => e.id)); bilan[c] = 0;
-        for (const e of await locales[c].lister()) if (!deja.has(e.id)) { const { notion, ...sans } = e; await cible.creer(sans); bilan[c]++; }
+        for (const e of await locales[c].lister()) if (!deja.has(e.id)) { const { notion, jira: j, ...sans } = e; await cible.creer(sans); bilan[c]++; }
       }
       return bilan;
     }
-    case 'source.fichier': await cfg.ecrireSource({ type: 'fichier' }); return { ok: true };
+    case 'source.fichier': await cfg.ecrireSource({ ...cfg.lireSource(), type: 'fichier' }); return { ok: true };   // les réglages Notion / Jira restent
     // Décisions réservées au CEO : seul ce serveur local (ou un humain en terminal) peut les prendre
     case 'exception.accorder': return exceptions.decider(String(op.id || ''), true, op.commentaire);
     case 'exception.refuser': return exceptions.decider(String(op.id || ''), false, op.commentaire);
@@ -188,7 +214,7 @@ const serveur = http.createServer(async (req, res) => {
       if (!egal(req.headers['x-siege-csrf'], CSRF) || !/^application\/json/.test(req.headers['content-type'] || '')) return envoyer(403, { erreur: 'Jeton de page manquant : rechargez la page' });
       let op; try { op = JSON.parse(await corps(req)); } catch { return envoyer(400, { erreur: 'Requête illisible' }); }
       try { return envoyer(200, { ok: true, resultat: (await action(op)) || null }); }
-      catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException) return envoyer(400, { erreur: e.message }); throw e; }
+      catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException || e instanceof integrations.ErreurIntegration || e instanceof gh.ErreurGithub) return envoyer(400, { erreur: e.message }); throw e; }
     }
     if (req.method !== 'GET') return envoyer(405, { erreur: 'Méthode refusée' });
     const rel = u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname).replace(/^\/+/, '');

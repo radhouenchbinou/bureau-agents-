@@ -131,7 +131,7 @@ L'équipe est autonome sur Notion : c'est elle qui crée les bases et les fait v
 
 1. Créez une **intégration interne** sur <https://www.notion.so/profile/integrations> avec les droits :
    lire, mettre à jour et insérer du contenu ; lire et insérer des commentaires.
-2. Donnez son jeton au Siège (onglet **Réglages**) ou via `export NOTION_TOKEN=ntn_…`. Il est stocké dans
+2. Donnez son jeton au Siège (onglet **Intégrations**) ou via `export NOTION_TOKEN=ntn_…`. Il est stocké dans
    `~/.siege/notion-token` (droits 600), **jamais dans le dépôt**.
 3. Créez une page Notion (ex. « Mon entreprise d'agents ») et partagez-la avec l'intégration
    (••• › Connexions).
@@ -139,8 +139,35 @@ L'équipe est autonome sur Notion : c'est elle qui crée les bases et les fait v
    sous la page, bascule le backlog sur Notion (`portfolio/source-backlog.json`) et importe les tickets
    locaux.
 
-Pour revenir aux fichiers locaux : Siège › Réglages › *Revenir aux fichiers locaux* (Notion n'est pas
-modifié).
+Pour changer de source : Siège › Intégrations › *Où vit le backlog* (rien n'est modifié dans les autres sources).
+
+## Brancher Jira (Cloud ou Data Center)
+
+Tout se fait dans **Siège › Intégrations › Jira** (ou `node siege/backlog.js jira-init …` pour le CEO en terminal).
+
+1. Un **jeton** : Jira Cloud → jeton d'API (<https://id.atlassian.com/manage-profile/security/api-tokens>) + e-mail
+   du compte ; Data Center / Server → jeton d'accès personnel. Gardé dans `~/.siege/jira-token` (600), ou `JIRA_TOKEN`.
+   Le compte doit être **administrateur Jira** pour l'initialisation (création de champs).
+2. **Où le Siège lit** : parmi tous les tableaux de l'entreprise, seulement les tickets de type **Story** (Features)
+   et **Bug** (Bugs) portant l'étiquette **`bureau-ia`** (types et étiquette modifiables), sur tous les projets ou
+   seulement le projet indiqué. Les nouveaux tickets sont créés dans ce projet, avec l'étiquette.
+3. **Initialiser** : vérifie l'accès, le projet et ses types, crée les champs **« Siège ID », « Siège Statut »,
+   « Siège Étape », « Siège Filiale »…** s'ils manquent (rien n'est supprimé ni renommé) et les ajoute à l'écran par
+   défaut. S'ils ne sont pas saisissables sur les écrans propres au projet, un avertissement dit lesquels un admin
+   doit y ajouter. L'initialisation active Jira ; *Importer le backlog local* y copie les tickets.
+
+Règles : l'**identifiant du Siège (COL-001, BUG-001) fait foi**, la clé Jira (PROJ-123) est un lien. Le statut du
+Siège vit dans « Siège Statut » ; si le workflow Jira a une transition vers un statut du même nom (ou celui indiqué
+dans *Statuts Jira correspondants*), le Siège la fait pour que vos tableaux suivent. Retirer un ticket du Siège enlève
+seulement l'étiquette : rien n'est jamais supprimé dans Jira. Une réponse du CEO écrite dans Jira est lue comme telle
+(auteur différent du compte de l'intégration). Une story étiquetée sans « Siège ID » (créée à la main) est ignorée.
+
+## Brancher GitHub depuis le Siège
+
+**Siège › Intégrations › GitHub** : App ID, Installation ID, clé privée (`.pem`, déposée ou collée, gardée dans
+`~/.siege/github-app.pem` en 600) et repo GitHub de chaque filiale (écrit dans `portfolio/github.json`, sans secret).
+*Tester la connexion* vérifie que la clé signe, que l'installation existe et que chaque repo déclaré lui est accessible.
+Voir plus bas « GitHub : une App, un jeton par rôle » pour créer l'App.
 
 ## Environnement fermé : droits, exceptions, autorisations
 

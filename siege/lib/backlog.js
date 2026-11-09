@@ -88,6 +88,7 @@ function complet(nom, e) {
   const out = { id: e.id };
   for (const [k, d] of Object.entries(col(nom).champs)) out[k] = k in e ? e[k] : d.type === 'liste' ? [] : d.type === 'nombre' ? null : (d.defaut || '');
   if (e.notion) out.notion = e.notion;
+  if (e.jira) out.jira = e.jira;
   return out;
 }
 

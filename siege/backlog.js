@@ -18,6 +18,7 @@ async function questionsOuvertes() {
   return out;
 }
 const { creerBases, idDepuisLien } = require('./lib/notion');
+const jira = require('./lib/jira');
 const { filiales } = require('./lib/registre');
 
 const AIDE = `Backlog du Siège — usage : node siege/backlog.js <commande> [options]
@@ -26,6 +27,10 @@ Lecture
   file                                  ordre de traitement (bugs bloquants, features prêtes, autres bugs)
   liste [features|bugs] [--filiale X] [--statut Y]
   voir <ID>                             un ticket en détail (feature ABC-001 ou bug BUG-001)
+
+Intégration (CEO) :
+  jira-init --url https://… --mode cloud|dc [--email …] --projet PROJ [--etiquette bureau-ia] [--type-feature Story] [--type-bug Bug] [--restreindre]
+  importer                              copie les tickets locaux dans Notion ou Jira
 
 Écriture (champs : --titre --rang --filiale --jalon --statut --priorite --etape --dependances --parent --description --agent
           bugs : --story --gravite --reproduction --attendu --obtenu --detecte-par --corrige-par)
@@ -69,8 +74,10 @@ async function main(argv) {
     case undefined: case 'aide': case '--help': console.log(AIDE); return;
     case 'source': {
       const s = cfg.lireSource();
-      console.log(s.type === 'notion' ? `Notion — Features ${s.bases && s.bases.features}, Bugs ${s.bases && s.bases.bugs}` : 'Fichiers locaux (portfolio/features.json, portfolio/bugs.json)');
-      console.log('Jeton Notion : ' + (cfg.jeton() ? 'présent' : 'absent'));
+      console.log(s.type === 'notion' ? `Notion — Features ${s.bases && s.bases.features}, Bugs ${s.bases && s.bases.bugs}`
+        : s.type === 'jira' ? `Jira ${s.mode === 'cloud' ? 'Cloud' : 'Data Center'} — ${s.url}, projet ${s.projet}, ${s.types.features} / ${s.types.bugs} étiquetés « ${s.etiquette} »`
+        : 'Fichiers locaux (portfolio/features.json, portfolio/bugs.json)');
+      console.log('Jeton Notion : ' + (cfg.jeton() ? 'présent' : 'absent') + ' · Jeton Jira : ' + (cfg.jetonJira() ? 'présent' : 'absent'));
       return;
     }
     case 'file': {
@@ -106,7 +113,7 @@ async function main(argv) {
       const src = cfg.source(n), f = await prefixeDe(o.filiale);
       const id = o.id || prochainId(n, await src.lister(), f.prefixe);
       const e = await src.creer({ ...o, id, filiale: f.nom });
-      console.log('Créé : ' + aff(e) + (e.notion ? '\n' + e.notion.url : '')); return;
+      console.log('Créé : ' + aff(e) + (e.notion ? '\n' + e.notion.url : e.jira ? '\n' + e.jira.url : '')); return;
     }
     case 'maj': {
       const id = reste[0]; if (!id) throw new ErreurBacklog('maj <ID> [champs]');
@@ -139,15 +146,25 @@ async function main(argv) {
       const fil = (await filiales(cfg.F.filiales)).map(f => f.nom), locales = cfg.sourcesLocales();
       const jalons = [...new Set((await locales.features.lister()).map(e => e.jalon).filter(Boolean))];
       const bases = await creerBases({ jeton: cfg.jeton(), pageParente: page, filiales: fil, jalons });
-      await cfg.ecrireSource({ type: 'notion', page, bases });
+      await cfg.ecrireSource({ ...s, type: 'notion', page, bases });
       console.log('Bases créées dans Notion (Features, Bugs). Le backlog est maintenant dans Notion.\nÉtape suivante : node siege/backlog.js importer'); return;
     }
+    case 'jira-init': {
+      // Réservé au CEO (la garde ne le permet à aucun agent) ; le Siège › Intégrations fait la même chose
+      const c = { type: 'jira', url: o.url, mode: o.mode, email: o.email, projet: o.projet, etiquette: o.etiquette || 'bureau-ia',
+        types: { features: o.type_feature || 'Story', bugs: o.type_bug || 'Bug' }, restreindre: 'restreindre' in o };
+      const r = await jira.initialiser(jira.verifierConfig(c), cfg.jetonJira());
+      const { bases, page } = cfg.lireSource(); await cfg.ecrireSource({ ...r.config, ...(bases ? { bases, page } : {}) });
+      console.log(`Jira prêt (connecté en tant que ${r.moi}). Champs créés : ${r.crees.join(', ') || 'aucun (déjà là)'}`);
+      for (const a of r.avertissements) console.log('  ⚠ ' + a);
+      console.log('Étape suivante : node siege/backlog.js importer'); return;
+    }
     case 'importer': {
-      if (cfg.lireSource().type !== 'notion') throw new ErreurBacklog('Le backlog n\'est pas sur Notion : lancez d\'abord notion-init');
+      if (!['notion', 'jira'].includes(cfg.lireSource().type)) throw new ErreurBacklog('Le backlog est en fichiers locaux : branchez d\'abord Notion ou Jira');
       const locales = cfg.sourcesLocales();
       for (const n of Object.keys(COLLECTIONS)) {
         const cible = cfg.source(n), deja = new Set((await cible.lister()).map(e => e.id)); let k = 0;
-        for (const e of await locales[n].lister()) { if (deja.has(e.id)) continue; const { notion, ...sans } = e; await cible.creer(sans); k++; }
+        for (const e of await locales[n].lister()) { if (deja.has(e.id)) continue; const { notion, jira: j, ...sans } = e; await cible.creer(sans); k++; }
         console.log(COLLECTIONS[n].libelle + ' : ' + k + ' ticket(s) importé(s)');
       }
       return;

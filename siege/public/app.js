@@ -21,8 +21,10 @@
   const depuis = t => { if (!t) return ''; const s = Math.round((Date.now() - (typeof t === 'number' ? t : Date.parse(t))) / 1e3); return s < 60 ? 'à l\'instant' : s < 3600 ? 'il y a ' + Math.round(s / 60) + ' min' : s < 86400 ? 'il y a ' + Math.round(s / 3600) + ' h' : 'il y a ' + Math.round(s / 86400) + ' j'; };
   function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('vu'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('vu'), 3200); }
 
-  async function charger() {
-    try { const r = await fetch('/api/etat', { cache: 'no-store' }); E = await r.json(); rendre(); }
+  const saisieEnCours = () => { const v = document.querySelector('.vue:not([hidden])'); return !!(v && v.dataset.modifie); };
+  async function charger(auto) {
+    // Un formulaire en cours de saisie (Intégrations, fiche ouverte) n'est jamais effacé par le rafraîchissement automatique
+    try { const r = await fetch('/api/etat', { cache: 'no-store' }); E = await r.json(); if (!(auto && saisieEnCours())) rendre(); }
     catch { bandeau('Le serveur du Siège ne répond pas.', true); }
   }
   async function act(op, ok) {
@@ -42,7 +44,7 @@
       h('span', { class: E.questions.liste.length ? 'alerte' : '' }, h('b', { text: E.questions.liste.length }), 'question(s) pour vous'),
       h('span', { class: enAttente().length ? 'alerte' : '' }, h('b', { text: enAttente().length }), 'exception(s) à décider'),
       h('span', {}, h('b', { text: act.length }), 'agent(s) au poste'),
-      h('span', {}, 'Backlog : ', h('b', { text: E.source.type === 'notion' ? 'Notion' : 'fichiers locaux' })));
+      h('span', {}, 'Backlog : ', h('b', { text: ({ notion: 'Notion', jira: 'Jira' })[E.source.type] || 'fichiers locaux' })));
     const errs = [E.features.erreur, E.bugs.erreur, E.questions.erreur, E.activite.erreur].filter(Boolean);
     bandeau(errs.length ? [...new Set(errs)].join(' · ') : '', true);
     ({ bureau: rendreBureau, backlog: rendreBacklog, agents: rendreAgents, droits: rendreDroits, reglages: rendreReglages })[vue]();
@@ -208,6 +210,7 @@
       h('div', { class: 'barre' }, h('button', { type: 'submit', class: 'btn prim', text: nouveau ? 'Créer' : 'Enregistrer' }),
         !nouveau ? h('button', { type: 'button', class: 'btn', text: 'Lancer dans Claude Code', onclick: () => lancer(e.id) }) : null,
         !nouveau && e.notion ? h('a', { class: 'btn', href: e.notion.url, target: '_blank', rel: 'noopener', text: 'Ouvrir dans Notion' }) : null,
+        !nouveau && e.jira ? h('a', { class: 'btn', href: e.jira.url, target: '_blank', rel: 'noopener', text: 'Ouvrir ' + e.jira.cle + ' dans Jira' }) : null,
         !nouveau ? h('button', { type: 'button', class: 'btn dang', text: 'Supprimer', onclick: async () => { if (confirm('Supprimer ' + e.id + ' ?')) { await act({ op: 'ticket.supprimer', collection: coll, id: e.id }, 'Supprimé').catch(() => {}); fermer(); } } }) : null));
     const fil = h('div', { class: 'fil' }, h('p', { class: 'aide', text: 'Chargement des commentaires…' }));
     const rep = h('textarea', { placeholder: 'Votre réponse ou votre consigne (CEO)…', 'aria-label': 'Commentaire' });
@@ -338,27 +341,94 @@
     ouvrir('Nouvelle skill', form);
   }
 
-  // ---------- Réglages ----------
+  // ---------- Réglages : intégrations du CEO (backlog Fichiers / Notion / Jira, App GitHub) ----------
+  const retoursInteg = { jira: null, github: null };   // résultats d'initialisation / de test, gardés d'un rendu à l'autre
   function rendreReglages() {
-    const s = E.source, jeton = h('input', { type: 'password', placeholder: 'ntn_…', autocomplete: 'off', 'aria-label': 'Jeton Notion' });
-    const page = h('input', { placeholder: 'https://www.notion.so/… (page partagée avec l\'intégration)', 'aria-label': 'Page Notion', style: 'flex:1;min-width:240px' });
-    vider($('#v-reglages'),
-      h('div', { class: 'carte' }, h('h3', { text: 'Où vit le backlog' }),
-        h('p', { class: 'aide', text: s.type === 'notion' ? 'Notion' + (s.configure ? '' : ' (bases non configurées)') + ' — jeton ' + (s.jeton ? 'présent' : 'absent') : 'Fichiers locaux : portfolio/features.json, portfolio/bugs.json, portfolio/commentaires.json' }),
-        s.type === 'notion' ? h('div', { class: 'barre' }, h('button', { type: 'button', class: 'btn', text: 'Revenir aux fichiers locaux', onclick: () => confirm('Le backlog local sera de nouveau utilisé (Notion n\'est pas modifié). Continuer ?') && act({ op: 'source.fichier' }, 'Backlog local') })) : null),
-      h('div', { class: 'carte' }, h('h3', { text: 'Brancher Notion' }),
-        h('ol', { class: 'aide' },
-          h('li', {}, 'Créez une intégration interne sur ', h('a', { href: 'https://www.notion.so/profile/integrations', target: '_blank', rel: 'noopener', text: 'notion.so/profile/integrations' }), ' avec les droits : lire, mettre à jour et insérer du contenu ; lire et insérer des commentaires.'),
-          h('li', { text: 'Collez son jeton ci-dessous (gardé dans ~/.siege, jamais dans le dépôt).' }),
-          h('li', { text: 'Dans Notion, partagez une page avec l\'intégration (menu ••• › Connexions), puis collez son lien : le Siège y crée les bases Features et Bugs.' }),
-          h('li', { text: 'Importez le backlog local : l\'équipe travaille ensuite directement dans Notion.' })),
-        h('div', { class: 'barre' }, jeton, h('button', { type: 'button', class: 'btn', text: 'Enregistrer le jeton', onclick: () => act({ op: 'notion.jeton', jeton: jeton.value }, 'Jeton enregistré').then(() => { jeton.value = ''; }).catch(() => {}) })),
-        h('div', { class: 'barre' }, page, h('button', { type: 'button', class: 'btn prim', text: 'Créer les bases', disabled: s.type === 'notion' && s.configure, onclick: () => act({ op: 'notion.init', page: page.value }, 'Bases Notion créées').catch(() => {}) })),
-        h('div', { class: 'barre' }, h('button', { type: 'button', class: 'btn', text: 'Importer le backlog local dans Notion', disabled: s.type !== 'notion', onclick: () => act({ op: 'notion.importer' }).then(r => toast('Importés : ' + r.features + ' features, ' + r.bugs + ' bugs')).catch(() => {}) }))),
+    const vue = $('#v-reglages'); delete vue.dataset.modifie;
+    vue.oninput = () => { vue.dataset.modifie = '1'; };
+    const I = E.integrations, J = I.jira.config || {}, G = I.github;
+    const mot = (ph, label) => h('input', { type: 'password', placeholder: ph, autocomplete: 'off', 'aria-label': label });
+    const champ = (label, el) => h('label', { class: 'champ' }, h('span', { text: label }), el);
+    const etat = (ok, oui, non) => h('span', { class: 'tag' + (ok ? ' ok' : ' attente'), text: ok ? oui : non });
+    const LIB = { fichier: 'Fichiers locaux', notion: 'Notion', jira: 'Jira' };
+
+    // Où vit le backlog
+    const sources = h('div', { class: 'carte' }, h('h3', { text: 'Où vit le backlog' }),
+      h('p', { class: 'aide' }, 'Actif : ', h('b', { text: LIB[I.actif] }), '. Les agents passent toujours par node siege/backlog.js, quelle que soit la source. Changer de source ne modifie ni ne supprime rien dans les autres.'),
+      h('div', { class: 'barre' },
+        h('button', { type: 'button', class: 'btn', text: 'Fichiers locaux', disabled: I.actif === 'fichier', onclick: () => act({ op: 'source.fichier' }, 'Backlog : fichiers locaux').catch(() => {}) }),
+        h('button', { type: 'button', class: 'btn', text: 'Notion', disabled: I.actif === 'notion' || !I.notion.configure, onclick: () => act({ op: 'source.notion' }, 'Backlog : Notion').catch(() => {}) }),
+        h('button', { type: 'button', class: 'btn', text: 'Jira', disabled: I.actif === 'jira' || !(J.initialise), onclick: () => act({ op: 'source.jira' }, 'Backlog : Jira').catch(() => {}) }),
+        h('button', { type: 'button', class: 'btn', text: 'Importer le backlog local dans la source active', disabled: I.actif === 'fichier', onclick: () => act({ op: 'backlog.importer' }).then(r => toast('Importés : ' + r.features + ' features, ' + r.bugs + ' bugs')).catch(() => {}) })));
+
+    // Notion
+    const jN = mot('ntn_…', 'Jeton Notion'), page = h('input', { placeholder: 'https://www.notion.so/… (page partagée avec l\'intégration)', 'aria-label': 'Page Notion', style: 'flex:1;min-width:240px' });
+    const notion = h('div', { class: 'carte' }, h('h3', {}, 'Notion ', etat(I.notion.configure, 'bases créées', 'non branché')),
+      h('ol', { class: 'aide' },
+        h('li', {}, 'Créez une intégration interne sur ', h('a', { href: 'https://www.notion.so/profile/integrations', target: '_blank', rel: 'noopener', text: 'notion.so/profile/integrations' }), ' : lire, mettre à jour et insérer du contenu ; lire et insérer des commentaires.'),
+        h('li', { text: 'Collez son jeton (gardé dans ~/.siege, jamais dans le dépôt), puis le lien d\'une page partagée avec elle : le Siège y crée les bases Features et Bugs.' })),
+      h('div', { class: 'barre' }, jN, h('button', { type: 'button', class: 'btn', text: I.notion.jeton ? 'Remplacer le jeton' : 'Enregistrer le jeton', onclick: () => act({ op: 'notion.jeton', jeton: jN.value }, 'Jeton Notion enregistré').then(() => { jN.value = ''; }).catch(() => {}) })),
+      h('div', { class: 'barre' }, page, h('button', { type: 'button', class: 'btn prim', text: 'Créer les bases', disabled: I.notion.configure || !I.notion.jeton, onclick: () => act({ op: 'notion.init', page: page.value }, 'Bases Notion créées').catch(() => {}) })));
+
+    // Jira
+    const f = {
+      mode: h('select', {}, [['cloud', 'Jira Cloud (…atlassian.net)'], ['dc', 'Jira Data Center / Server']].map(([v, t]) => h('option', { value: v, text: t, selected: (J.mode || 'cloud') === v }))),
+      url: h('input', { value: J.url || '', placeholder: 'https://entreprise.atlassian.net' }),
+      email: h('input', { value: J.email || '', placeholder: 'compte du jeton (Cloud seulement)', type: 'email' }),
+      projet: h('input', { value: J.projet || '', placeholder: 'PROJ (où les tickets sont créés)' }),
+      etiquette: h('input', { value: J.etiquette || 'bureau-ia' }),
+      typeFeature: h('input', { value: (J.types || {}).features || 'Story' }), typeBug: h('input', { value: (J.types || {}).bugs || 'Bug' }),
+      restreindre: h('input', { type: 'checkbox', checked: !!J.restreindre })
+    };
+    const statuts = [...new Set([...E.schemas.features.champs.statut.options, ...E.schemas.bugs.champs.statut.options])];
+    const corresp = Object.fromEntries(statuts.map(st => [st, h('input', { value: (J.statuts || {})[st] || '', placeholder: 'même nom' })]));
+    const jJ = mot('jeton d\'API ou jeton personnel', 'Jeton Jira'), retour = h('div', { class: 'aide' });
+    const majMail = () => { f.email.closest('label').hidden = f.mode.value !== 'cloud'; };
+    f.mode.onchange = majMail;
+    const jiraC = h('div', { class: 'carte' }, h('h3', {}, 'Jira ', etat(J.initialise, 'initialisé', 'non branché')),
+      h('ol', { class: 'aide' },
+        h('li', {}, 'Cloud : créez un jeton d\'API sur ', h('a', { href: 'https://id.atlassian.com/manage-profile/security/api-tokens', target: '_blank', rel: 'noopener', text: 'id.atlassian.com' }), '. Data Center : profil › Jetons d\'accès personnels. Le compte doit être administrateur Jira pour créer les champs « Siège … ».'),
+        h('li', { text: 'Le Siège ne voit que les tickets de type Story (Features) et Bug (Bugs) portant l\'étiquette ci-dessous, parmi tous vos tableaux. L\'identifiant du Siège (COL-001, BUG-001) fait foi ; la clé Jira sert de lien.' }),
+        h('li', { text: 'Initialiser : vérifie l\'accès et le projet, crée les champs manquants (rien n\'est supprimé) et les ajoute à l\'écran par défaut. Un avertissement dit ce qu\'un admin doit ajouter aux écrans propres au projet.' })),
+      h('div', { class: 'barre' }, jJ, h('button', { type: 'button', class: 'btn', text: I.jira.jeton ? 'Remplacer le jeton' : 'Enregistrer le jeton', onclick: () => act({ op: 'jira.jeton', jeton: jJ.value }, 'Jeton Jira enregistré').then(() => { jJ.value = ''; }).catch(() => {}) })),
+      h('div', { class: 'grille2' }, champ('Type de Jira', f.mode), champ('Adresse', f.url), champ('E-mail', f.email), champ('Projet', f.projet),
+        champ('Étiquette', f.etiquette), champ('Type des Features', f.typeFeature), champ('Type des Bugs', f.typeBug),
+        h('label', { class: 'champ coche' }, f.restreindre, h('span', { text: 'Ne lire que ce projet (sinon : étiquette sur tous les projets)' }))),
+      h('details', {}, h('summary', { text: 'Statuts Jira correspondants (facultatif)' }),
+        h('p', { class: 'aide', text: 'Le statut du Siège est toujours gardé dans « Siège Statut ». Si le workflow Jira a une transition vers le statut indiqué (ou du même nom), le Siège la fait pour que vos tableaux suivent.' }),
+        h('div', { class: 'grille2' }, statuts.map(st => champ(st, corresp[st])))),
+      h('div', { class: 'barre' }, h('button', { type: 'button', class: 'btn prim', text: J.initialise ? 'Réinitialiser (champs manquants seulement)' : 'Initialiser Jira', disabled: !I.jira.jeton, onclick: () => {
+        const op = { op: 'jira.init', ...Object.fromEntries(Object.entries(f).map(([k, el]) => [k, el.type === 'checkbox' ? el.checked : el.value])), statuts: Object.fromEntries(Object.entries(corresp).map(([k, el]) => [k, el.value])) };
+        act(op).then(r => { retoursInteg.jira = r; toast('Jira initialisé'); rendreReglages(); }).catch(() => {});
+      } })), retour);
+    if (retoursInteg.jira) { const r = retoursInteg.jira; vider(retour, h('p', { text: 'Connecté en tant que ' + r.moi + '. Champs créés : ' + (r.crees.join(', ') || 'aucun (déjà là)') + '.' }), r.avertissements.length ? h('ul', {}, r.avertissements.map(a => h('li', { class: 'attention', text: a }))) : null); }
+    setTimeout(majMail);
+
+    // GitHub
+    const gApp = h('input', { value: G.app_id || '', placeholder: '123456', inputmode: 'numeric' }), gInst = h('input', { value: G.installation_id || '', placeholder: '98765432', inputmode: 'numeric' });
+    const gRepos = Object.fromEntries(G.dossiers.map(d => [d, h('input', { value: G.repos[d] || '', placeholder: 'compte/repo' })]));
+    const pem = h('textarea', { placeholder: '-----BEGIN RSA PRIVATE KEY-----\n…', 'aria-label': 'Clé privée de l\'App', rows: 3, autocomplete: 'off' });
+    const fichierPem = h('input', { type: 'file', accept: '.pem', 'aria-label': 'Fichier .pem' });
+    fichierPem.onchange = () => { const x = fichierPem.files[0]; if (x) x.text().then(t => { pem.value = t; }); };
+    const retourG = h('div', { class: 'aide' });
+    const github = h('div', { class: 'carte' }, h('h3', {}, 'GitHub ', etat(G.configure && G.cle, 'App configurée', 'non branché')),
+      h('ol', { class: 'aide' },
+        h('li', {}, 'Créez une App GitHub (', h('a', { href: 'https://github.com/settings/apps/new', target: '_blank', rel: 'noopener', text: 'github.com/settings/apps/new' }), ') : Contents, Pull requests, Commit statuses en lecture-écriture, Metadata en lecture. Installez-la sur les repos des filiales seulement.'),
+        h('li', { text: 'Renseignez l\'App ID, l\'Installation ID et la clé privée (.pem, gardée dans ~/.siege, jamais dans le dépôt), puis le repo GitHub de chaque filiale. Chaque agent reçoit un jeton d\'une heure limité à un repo et à son rôle.' })),
+      h('div', { class: 'grille2' }, champ('App ID', gApp), champ('Installation ID', gInst), G.dossiers.map(d => champ('Repo de ' + d, gRepos[d]))),
+      h('div', { class: 'barre' }, h('button', { type: 'button', class: 'btn prim', text: 'Enregistrer', onclick: () => act({ op: 'github.config', app_id: gApp.value, installation_id: gInst.value, repos: Object.fromEntries(Object.entries(gRepos).map(([k, el]) => [k, el.value.trim()])) }, 'GitHub enregistré').catch(() => {}) })),
+      champ(G.cle ? 'Remplacer la clé privée' : 'Clé privée de l\'App', pem), h('div', { class: 'barre' }, fichierPem,
+        h('button', { type: 'button', class: 'btn', text: 'Enregistrer la clé', onclick: () => act({ op: 'github.cle', pem: pem.value }, 'Clé enregistrée').then(() => { pem.value = ''; fichierPem.value = ''; }).catch(() => {}) }),
+        h('button', { type: 'button', class: 'btn', text: 'Tester la connexion', disabled: !(G.configure && G.cle), onclick: () => act({ op: 'github.tester' }).then(r => { retoursInteg.github = r; rendreReglages(); }).catch(() => {}) })), retourG);
+    if (retoursInteg.github) { const r = retoursInteg.github; vider(retourG,
+      h('p', { text: 'App « ' + r.app + ' » : ' + r.accessibles.length + ' repo(s) accessible(s).' }),
+      r.manquants.length ? h('p', { class: 'attention', text: 'Repos déclarés mais non accessibles à l\'App (installez-la dessus) : ' + r.manquants.join(', ') }) : h('p', { text: 'Tous les repos déclarés sont accessibles.' })); }
+
+    vider($('#v-reglages'), sources, jiraC, notion, github,
       h('div', { class: 'carte' }, h('h3', { text: 'Siège' }), h('p', { class: 'mono muted', text: E.racine }),
-        h('p', { class: 'aide', text: 'Les agents utilisent la même intégration en ligne de commande : node siege/backlog.js (file, voir, maj, creer, commenter, questions).' })));
+        h('p', { class: 'aide', text: 'Jetons et clé privée restent sur ce poste (~/.siege, droits 600) et ne sont jamais renvoyés à la page.' })));
   }
 
   charger();
-  setInterval(() => { if (!document.hidden) charger(); }, 10e3);
+  setInterval(() => { if (!document.hidden) charger(true); }, 10e3);
 })();
