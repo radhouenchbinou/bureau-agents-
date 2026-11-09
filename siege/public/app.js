@@ -33,6 +33,7 @@
     if (!r.ok) { toast(j.erreur || 'Erreur'); throw new Error(j.erreur); }
     if (ok) toast(ok); await charger(); return j.resultat;
   }
+  const actionner = (...a) => act(...a);   // rendre() a une variable locale « act »
   function bandeau(m, err) { const b = $('#bandeau'); b.hidden = !m; b.textContent = m || ''; b.classList.toggle('err', !!err); }
 
   // ---------- Rendu global ----------
@@ -48,12 +49,39 @@
       h('span', {}, 'Backlog : ', h('b', { text: ({ notion: 'Notion', jira: 'Jira' })[E.source.type] || 'fichiers locaux' })));
     const errs = [E.features.erreur, E.bugs.erreur, E.questions.erreur, E.activite.erreur].filter(Boolean);
     bandeau(errs.length ? [...new Set(errs)].join(' · ') : '', true);
-    ({ bureau: rendreBureau, backlog: rendreBacklog, agents: rendreAgents, demandes: rendreDemandes, droits: rendreDroits, reglages: rendreReglages })[vue]();
+    const L = E.modeLibre || {}, bl = $('#bandeau-libre');
+    bl.hidden = !L.actif;
+    if (L.actif) vider(bl, h('b', { text: 'Mode sans restriction actif' }), ' — garde et bac à sable levés pour tous les agents' + (L.jusqua ? ', jusqu\'à ' + new Date(L.jusqua).toLocaleString('fr-FR') : ', sans limite de durée') + '. ',
+      h('button', { type: 'button', class: 'btn petit', text: 'Rétablir les restrictions', onclick: () => actionner({ op: 'admin.modeLibre', actif: false }, 'Restrictions rétablies').catch(() => {}) }));
+    ({ bureau: rendreBureau, backlog: rendreBacklog, agents: rendreAgents, demandes: rendreDemandes, droits: rendreDroits, reglages: rendreReglages, admin: rendreAdmin })[vue]();
   }
   document.querySelectorAll('.tabs button').forEach(bt => bt.addEventListener('click', () => {
     vue = bt.dataset.v; document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', x === bt));
     document.querySelectorAll('.vue').forEach(s => { s.hidden = s.id !== 'v-' + vue; }); rendre();
   }));
+
+  // ---------- Admin : mode sans restriction ----------
+  function rendreAdmin() {
+    const L = E.modeLibre || {};
+    const duree = h('select', { 'aria-label': 'Durée' }, [[1, '1 heure'], [4, '4 heures'], [8, '8 heures'], [24, '24 heures'], [0, 'Jusqu\'à ce que je le désactive']].map(([v, t]) => h('option', { value: v, text: t })));
+    const conf = h('input', { placeholder: 'Tapez SANS RESTRICTION', 'aria-label': 'Confirmation', autocomplete: 'off' });
+    const vueA = $('#v-admin'); vueA.oninput = () => { vueA.dataset.modifie = '1'; };
+    const fin = () => { delete vueA.dataset.modifie; };
+    const journal = ((E.droits && E.droits.journal) || []).filter(x => /sans_restriction/.test(x.evenement)).slice(0, 15);
+    vider(vueA,
+      h('div', { class: 'carte' }, h('h3', { text: 'Mode sans restriction' }),
+        h('p', { text: L.actif ? 'Actif' + (L.jusqua ? ' jusqu\'à ' + new Date(L.jusqua).toLocaleString('fr-FR') : ', sans limite de durée') + ' (activé ' + depuis(L.active_le) + ').' : 'Inactif : chaque agent n\'a que les droits de son rôle.' }),
+        h('p', { class: 'aide', text: 'Lève toutes les restrictions de tous les agents : la garde laisse tout passer, le bac à sable et les interdictions de Claude Code sont retirés (accès réseau, écriture partout, lecture des secrets, git push, outils du Siège). Chaque action reste journalisée. Les sessions déjà ouvertes gardent leur bac à sable jusqu\'à leur redémarrage ; la garde, elle, change tout de suite.' }),
+        L.actif
+          ? h('div', { class: 'barre' }, h('button', { type: 'button', class: 'btn prim', text: 'Rétablir les restrictions', onclick: async () => { fin(); await act({ op: 'admin.modeLibre', actif: false }, 'Restrictions rétablies').catch(() => {}); } }))
+          : h('div', { class: 'barre' }, duree, conf, h('button', { type: 'button', class: 'btn dang', text: 'Désactiver toutes les restrictions', onclick: async () => {
+              if (conf.value.trim() !== 'SANS RESTRICTION') return toast('Tapez SANS RESTRICTION pour confirmer');
+              fin(); await act({ op: 'admin.modeLibre', actif: true, duree_h: Number(duree.value), confirmation: 'SANS RESTRICTION' }, 'Restrictions levées').catch(() => {});
+            } }))),
+      h('div', { class: 'carte' }, h('h3', { text: 'Historique' }), journal.length
+        ? h('div', { class: 'fil' }, journal.map(x => h('div', { class: 'com' }, h('small', { text: depuis(x.date) + ' · ' + (x.role || '') }), h('span', { text: x.evenement.replace(/_/g, ' ') + (x.outil ? ' — ' + x.outil + ' ' + (x.detail || '') : '') }))))
+        : h('p', { class: 'aide', text: 'Aucun passage en mode sans restriction.' })));
+  }
 
   // ---------- Bureau ----------
   const ETAT = { au_poste: ['on', 'Au poste'], en_attente: ['attend', 'En attente'], termine: ['', 'Terminé'], interrompu: ['err', 'Interrompu'] };

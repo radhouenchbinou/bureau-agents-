@@ -406,6 +406,11 @@ agent qui a fini et `fork` sont refusés (liaison session → étape dans `~/.si
   rédaction* (avec votre remarque) ou *Abandonner* : rien n'entre au backlog sans votre validation. Une rédaction
   à la fois, 5 min au plus, reprise au redémarrage du Siège ; suivi dans `~/.siege/redactions.json`.
 - **Agents** : créer, modifier (description, modèle, consigne), supprimer.
+- **Admin** : *Désactiver toutes les restrictions* (mode sans restriction), pour 1, 4, 8 ou 24 h ou jusqu'à
+  désactivation, après avoir tapé « SANS RESTRICTION ». La garde laisse alors tout passer (elle journalise chaque
+  action), le bac à sable et les interdictions de Claude Code sont retirés de `.claude/settings.json`. Un bandeau
+  rouge le signale sur toutes les pages, avec *Rétablir les restrictions* ; à l'échéance, tout est rétabli
+  automatiquement. Les sessions Claude Code déjà ouvertes gardent leur bac à sable jusqu'à leur redémarrage.
 - **Droits** : exceptions à accorder ou refuser, refus récents de la garde, autorisations permanentes,
   droits par rôle, skills (socle et entreprise) par type d'agent.
 - **Réglages** : source du backlog et branchement Notion.

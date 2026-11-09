@@ -54,6 +54,11 @@ process.stdin.on('end', () => {
     const garde = require('./lib/garde');
     let d = garde.decider(garde.charger(RACINE), { outil: h.tool_name === 'Task' ? 'Agent' : h.tool_name, entree: h.tool_input || {} }, { racine: RACINE, role, exceptions: ex.actives(role) });
     const n = garde.normaliser(h.tool_name === 'Task' ? 'Agent' : h.tool_name, h.tool_input || {}), hn = { ...h, tool_name: n.outil, tool_input: n.entree };
+    if (d.libre) {
+      const e = hn.tool_input || {}, quoi = String(e.command || e.file_path || e.url || e.subagent_type || '').slice(0, 300);
+      journal({ evenement: 'action_sans_restriction', role, outil: hn.tool_name, detail: quoi });
+      return process.exit(0);
+    }
     if (d.ok && hn.tool_name === 'Agent') d = modeleAutorise(hn) || mission(garde, hn);
     // Un agent d'un autre moteur (node siege/agent.js lancer) suit la même règle : une session = une étape d'un ticket
     if (d.ok && hn.tool_name === 'Bash') {

@@ -29,6 +29,13 @@ function ecrireAtomique(f, contenu) { const t = f + '.' + process.pid + '.tmp'; 
 function settings(racine) {
   const a = lire(racine), de = t => a.liste.filter(x => x.type === t).map(x => x.valeur);
   const crochet = cmd => [{ matcher: '*', hooks: [{ type: 'command', command: cmd }] }];
+  // Mode sans restriction (Siège › Admin) : ni interdictions, ni bac à sable ; la garde reste branchée pour journaliser
+  if (require('./mode-libre').actif(racine)) return {
+    _genere_par: 'node siege/droits.js — MODE SANS RESTRICTION activé par le CEO (Siège › Admin)',
+    permissions: { deny: [], allow: [] },
+    hooks: { PreToolUse: crochet('node "$CLAUDE_PROJECT_DIR/siege/garde.js"'), SubagentStop: crochet('node "$CLAUDE_PROJECT_DIR/siege/garde.js"') },
+    sandbox: { enabled: false }
+  };
   return {
     _genere_par: 'node siege/droits.js — ne pas modifier à la main : Siège › Droits',
     permissions: {

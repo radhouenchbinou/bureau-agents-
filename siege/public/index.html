@@ -14,6 +14,7 @@
     <h1>Le Siège</h1>
     <div class="counts" id="counts"></div>
     <div class="bandeau" id="bandeau" role="status" hidden></div>
+    <div class="bandeau libre" id="bandeau-libre" role="alert" hidden></div>
   </header>
 
   <nav class="tabs" role="tablist" aria-label="Vues">
@@ -23,6 +24,7 @@
     <button type="button" role="tab" data-v="demandes" aria-selected="false">Demandes</button>
     <button type="button" role="tab" data-v="droits" aria-selected="false">Droits</button>
     <button type="button" role="tab" data-v="reglages" aria-selected="false">Intégrations</button>
+    <button type="button" role="tab" data-v="admin" aria-selected="false">Admin</button>
   </nav>
 
   <section class="vue" id="v-bureau" role="tabpanel"></section>
@@ -31,6 +33,7 @@
   <section class="vue" id="v-demandes" role="tabpanel" hidden></section>
   <section class="vue" id="v-droits" role="tabpanel" hidden></section>
   <section class="vue" id="v-reglages" role="tabpanel" hidden></section>
+  <section class="vue" id="v-admin" role="tabpanel" hidden></section>
 </div>
 
 <div class="voile" id="voile" hidden></div>

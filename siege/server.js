@@ -16,7 +16,7 @@ const fs = require('fs'), os = require('os');
 const jira = require('./lib/jira'), integrations = require('./lib/integrations'), gh = require('./lib/github');
 const moteurs = require('./lib/moteurs'), copilote = require('./lib/copilote');
 const tm = require('./lib/teams');
-const redaction = require('./lib/redaction');
+const redaction = require('./lib/redaction'), modeLibre = require('./lib/mode-libre');
 const tg = require('./lib/telegram'), sl = require('./lib/slack'), demandes = require('./lib/demandes'), canaux = require('./lib/canaux'), { Messagerie, commun, communModifier } = require('./lib/messagerie');
 
 // Telegram : sujets dont le CEO est prévenu une fois chacun (questions d'agents, exceptions à décider)
@@ -44,6 +44,16 @@ function journalGarde(n = 40) {
     return t.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
   } catch { return []; }
 }
+function journalAdmin(ligne) {
+  try { const d = process.env.SIEGE_PRIVE || path.join(os.homedir(), '.siege'); fs.mkdirSync(d, { recursive: true, mode: 0o700 });
+    fs.appendFileSync(path.join(d, 'journal-garde.jsonl'), JSON.stringify({ date: new Date().toISOString(), role: 'CEO', ...ligne }) + '\n', { mode: 0o600 }); } catch {}
+}
+// Fin du mode sans restriction à son échéance : réglages de Claude Code (bac à sable, interdictions) rétablis
+let libreVu = null;
+setInterval(async () => {
+  const e = modeLibre.lire(cfg.F.racine);
+  if (e.expire && libreVu !== e.jusqua) { libreVu = e.jusqua; modeLibre.desactiver(cfg.F.racine); journalAdmin({ evenement: 'mode_sans_restriction_expire' }); await droits.appliquer({ silencieux: true }).catch(() => {}); }
+}, 30e3).unref();
 function vueDroits() {
   const p = droits.politique();
   return {
@@ -90,6 +100,7 @@ async function etat() {
     messagerie: (() => { const k = commun(); return { plafondJour: k.plafondJour || 50, sessionsAujourdhui: k.sessions[new Date().toISOString().slice(0, 10)] || 0,
       enCours: messagerie.enCours, file: messagerie.attente, canauxActifs: canaux.TOUS.filter(c => c.pret()).map(c => c.libelle) }; })(),
     demandes: demandes.lire().liste.slice(-200).reverse(),
+    modeLibre: modeLibre.lire(cfg.F.racine),
     redactions: (() => { const l = redaction.lire().liste; return [...l.filter(redaction.OUVERTE), ...l.filter(x => !redaction.OUVERTE(x)).slice(-5)].reverse(); })(),
     integrations: integrations.vue({ racine: cfg.F.racine, prive: cfg.F.prive, source: s, jetonNotion: cfg.jeton(), jetonJira: cfg.jetonJira(), filiales: fil }),
     schemas: Object.fromEntries(Object.entries(COLLECTIONS).map(([n, c]) => [n, { libelle: c.libelle, champs: c.champs }])), etapes: ETAPES,
@@ -125,6 +136,18 @@ async function action(op) {
       const fil = (await filiales(cfg.F.filiales)).find(f => f.nom === op.ticket.filiale) || refus('Choisissez une filiale');
       const src = cfg.source(n), id = prochainId(n, await src.lister(), fil.prefixe);
       return src.creer({ ...sansAuto(n, op.ticket), id });
+    }
+    // Admin : mode sans restriction (CEO seulement, confirmation tapée) ; réglages Claude Code régénérés aussitôt
+    case 'admin.modeLibre': {
+      if (op.actif) {
+        if (op.confirmation !== 'SANS RESTRICTION') refus('Tapez SANS RESTRICTION pour confirmer');
+        const e = modeLibre.activer(cfg.F.racine, op.duree_h);
+        journalAdmin({ evenement: 'mode_sans_restriction_active', jusqua: e.jusqua });
+        await droits.appliquer({ silencieux: true }); return e;
+      }
+      const e = modeLibre.desactiver(cfg.F.racine);
+      journalAdmin({ evenement: 'mode_sans_restriction_desactive' });
+      await droits.appliquer({ silencieux: true }); return e;
     }
     // Demande en langage courant → proposition rédigée par l'IA → validation du CEO → ticket
     case 'redaction.demander': { const x = redaction.demander(op.texte); redacteur.suivant(); return x; }

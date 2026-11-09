@@ -157,3 +157,4 @@ label.champ.coche{display:flex;align-items:center;gap:8px;grid-column:1/-1}
 .redaction textarea,.carte > textarea{width:100%;box-sizing:border-box;min-height:64px}
 .erreur-red{color:var(--risk);font-size:13px}
 .redaction textarea[name="description"],.redaction textarea[name="reproduction"]{min-height:240px;font:12.5px/1.5 var(--mono)}
+.bandeau.libre{border-color:var(--risk);background:color-mix(in srgb,var(--risk) 14%,transparent);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
