@@ -4,6 +4,24 @@
 'use strict';
 const fsp = require('fs').promises, path = require('path');
 
+// C3 : verrou inter-processus sur un fichier du backlog (création exclusive d'un .lock). Deux processus ne peuvent
+// plus lire le même état et l'écraser ; un verrou abandonné (> 30 s) est repris.
+async function sousVerrou(fichier, travail) {
+  const verrou = fichier + '.lock', fin = Date.now() + 10000;
+  await fsp.mkdir(path.dirname(fichier), { recursive: true });
+  for (;;) {
+    try { await fsp.writeFile(verrou, String(process.pid), { flag: 'wx' }); break; }
+    catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      const age = Date.now() - (await fsp.stat(verrou).then(s => s.mtimeMs, () => Date.now()));
+      if (age > 30000) { await fsp.unlink(verrou).catch(() => {}); continue; }
+      if (Date.now() > fin) throw new ErreurBacklog('backlog verrouillé par un autre processus : ' + path.basename(fichier));
+      await new Promise(r => setTimeout(r, 20 + Math.random() * 40));
+    }
+  }
+  try { return await travail(); } finally { await fsp.unlink(verrou).catch(() => {}); }
+}
+
 const ETAPES = ['0 · Cadrage', '1 · Spécification', '2 · Conception', '3 · Plan de tests', '4 · Développement',
   '5 · Recette', '6 · Revue de code', '7 · Sécurité', '8 · Livraison', '9 · Documentation'];
 const ID_FEATURE = /^[A-Z]{3}-\d{3}$/;
@@ -172,13 +190,13 @@ class CommentairesFichier {
   async lister(id) { return (await this.tous())[id] || []; }
   ajouter(id, c) {
     const v = { date: new Date().toISOString(), ...commentaire(c) };
-    const r = this.file.then(async () => {
+    const r = this.file.then(() => sousVerrou(this.fichier, async () => {
       const t = await this.tous(); (t[id] = t[id] || []).push(v);
       const tmp = this.fichier + '.' + process.pid + '.tmp';
       await fsp.mkdir(path.dirname(this.fichier), { recursive: true });
       await fsp.writeFile(tmp, JSON.stringify(t, null, 2) + '\n'); await fsp.rename(tmp, this.fichier);
       return v;
-    });
+    }));
     this.file = r.catch(() => {});
     return r;
   }
@@ -197,18 +215,28 @@ class SourceFichier {
   }
   // Écritures sérialisées et atomiques
   ecrire(maj) {
-    const r = this.file.then(async () => {
+    // La lecture, la modification et l'écriture se font sous verrou : l'identifiant attribué est réservé pour ce processus
+    const r = this.file.then(() => sousVerrou(this.fichier, async () => {
       const els = await this.lire(), res = maj(els);
       const tmp = this.fichier + '.' + process.pid + '.tmp';
       await fsp.mkdir(path.dirname(this.fichier), { recursive: true });
       await fsp.writeFile(tmp, JSON.stringify({ version: 1, collection: this.collection, elements: els }, null, 2) + '\n');
       await fsp.rename(tmp, this.fichier);
       return res;
-    });
+    }));
     this.file = r.catch(() => {});
     return r;
   }
   async lister() { return (await this.lire()).map(e => complet(this.collection, e)); }
+  // Identifiant calculé à partir de l'état lu sous verrou : réservation atomique
+  creerAvecId(prefixe, e, idDemande) {
+    return this.ecrire(els => {
+      const id = idDemande || prochainId(this.collection, els, prefixe);
+      const v = valider(this.collection, { ...e, id }, { strict: true });
+      if (els.some(x => x.id === v.id)) refus('Identifiant déjà utilisé : ' + v.id);
+      const n = complet(this.collection, v); els.push(n); return n;
+    });
+  }
   creer(e) {
     const v = valider(this.collection, e, { strict: true });
     return this.ecrire(els => { if (els.some(x => x.id === v.id)) refus('Identifiant déjà utilisé : ' + v.id); const n = complet(this.collection, v); els.push(n); return n; });

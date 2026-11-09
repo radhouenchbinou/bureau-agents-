@@ -106,8 +106,10 @@ async function main(argv) {
       const n = reste[0] === 'bug' ? 'bugs' : reste[0] === 'feature' ? 'features' : null;
       if (!n) throw new ErreurBacklog('creer feature … ou creer bug …');
       const src = cfg.source(n), f = await prefixeDe(o.filiale);
-      const id = o.id || prochainId(n, await src.lister(), f.prefixe);
-      const e = await src.creer({ ...o, id, filiale: f.nom });
+      // C3 : l'identifiant est calculé et réservé sous verrou (deux créations concurrentes n'obtiennent pas le même)
+      const e = src.creerAvecId
+        ? await src.creerAvecId(f.prefixe, { ...o, filiale: f.nom }, o.id)
+        : await src.creer({ ...o, id: o.id || prochainId(n, await src.lister(), f.prefixe), filiale: f.nom });
       console.log('Créé : ' + aff(e) + (e.notion ? '\n' + e.notion.url : e.jira ? '\n' + e.jira.url : '')); return;
     }
     case 'maj': {
