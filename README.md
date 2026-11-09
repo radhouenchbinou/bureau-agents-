@@ -166,10 +166,18 @@ dans *Statuts Jira correspondants*), le Siège la fait pour que vos tableaux sui
 seulement l'étiquette : rien n'est jamais supprimé dans Jira. Une réponse du CEO écrite dans Jira est lue comme telle
 (auteur différent du compte de l'intégration). Une story étiquetée sans « Siège ID » (créée à la main) est ignorée.
 
-## Telegram et Slack : les collaborateurs écrivent au directeur, le directeur prévient le CEO
+## Teams, Telegram et Slack : les collaborateurs écrivent au directeur, le directeur prévient le CEO
 
-Option activable dans **Siège › Intégrations**, sur Telegram, sur Slack ou les deux (mêmes fonctions, une file et un
+Option activable dans **Siège › Intégrations**, sur Microsoft Teams, Telegram et/ou Slack (mêmes fonctions, une file et un
 plafond communs). Les collaborateurs n'ont **jamais** accès au Siège.
+
+**Microsoft Teams** (sans adresse publique) : un compte Microsoft 365 dédié « Directeur » et une inscription
+d'application Entra (client public autorisé, permissions déléguées `User.Read`, `Chat.ReadWrite`, `offline_access`,
+consentement de l'administrateur). Dans le Siège : tenant, ID d'application, puis *Connecter le compte Directeur* (code
+d'appareil, aucun mot de passe gardé ; jetons dans `~/.siege/teams-token.json`, 600, rafraîchis seuls). Le Siège lit
+les conversations 1:1 de ce compte par Microsoft Graph toutes les 5 s (jamais l'historique d'avant l'activation) et
+répond depuis lui. Pas de boutons : le demandeur répond « oui » / « non », le CEO « accepter DEM-… », « refuser DEM-… »
+ou « DEM-… : consigne ».
 
 **Slack** : une app en *Socket Mode* (le Siège ouvre lui-même la connexion, aucune adresse publique ; Node 22+).
 *Create New App › From a manifest* avec le manifeste fourni dans le Siège, *Install to Workspace*, puis collez le jeton
@@ -209,6 +217,15 @@ ajoutez. Vous activez ou désactivez chaque moteur et chaque modèle (`droits/mo
 
 - **Claude Code** fait tourner le directeur et ses sous-agents ; un sous-agent dont le modèle est désactivé (dans sa
   définition ou à l'appel) est refusé par la garde.
+- **GitHub Copilot CLI** (s'il est installé et activé) : mêmes rôles de filiale, avec les **agents Copilot générés**
+  depuis les mêmes sources (`.github/agents/<rôle>.agent.md`, `.github/skills/`, par `node siege/droits.js appliquer`).
+  Chaque agent Copilot porte la garde du Siège en hook `PreToolUse` (format compatible : mêmes noms d'outils, code 2 =
+  refus ; le rôle lui est donné par `SIEGE_ROLE`) ; outil web refusé ; passation sur le ticket, push par le Siège.
+  **Connexion** dans Siège › Intégrations › GitHub Copilot, comme dans l'extension Copilot des IDE : **GitHub.com** ou
+  **GitHub Enterprise Cloud** (`<nom>.ghe.com`) — une fois, `copilot login` ou `copilot login --host <nom>.ghe.com`
+  (jeton dans le gestionnaire d'identification du système), ou un jeton fin `github_pat_…` avec la permission
+  « Copilot Requests ». Les jetons classiques `ghp_…` ne sont pas acceptés par Copilot CLI. Sous Windows, le Siège
+  lance Copilot par node, sans passer par `cmd.exe`.
 - **Codex** (s'il est installé et activé) reçoit du directeur une tâche précise d'un ticket :
   `node siege/agent.js lancer --moteur codex --modele <id> --role dev-backend --filiale <Nom> --ticket <ID>
   --etape "<n> · <nom>" --mission "…" [--pousser feature/<ID>]`. Rôles de filiale seulement (PO, devs, QA,
@@ -219,7 +236,9 @@ ajoutez. Vous activez ou désactivez chaque moteur et chaque modèle (`droits/mo
 
 ## Brancher GitHub depuis le Siège
 
-**Siège › Intégrations › GitHub** : App ID, Installation ID, clé privée (`.pem`, déposée ou collée, gardée dans
+**Siège › Intégrations › GitHub** : **adresse GitHub** (https://github.com, GitHub Enterprise Cloud
+`https://<nom>.ghe.com` ou GitHub Enterprise Server `https://<serveur>` : l'API, le push et le réseau autorisé du bac à
+sable suivent cette adresse), App ID, Installation ID, clé privée (`.pem`, déposée ou collée, gardée dans
 `~/.siege/github-app.pem` en 600) et repo GitHub de chaque filiale (écrit dans `portfolio/github.json`, sans secret).
 *Tester la connexion* vérifie que la clé signe, que l'installation existe et que chaque repo déclaré lui est accessible.
 Voir plus bas « GitHub : une App, un jeton par rôle » pour créer l'App.

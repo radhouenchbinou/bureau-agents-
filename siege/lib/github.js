@@ -4,8 +4,21 @@
 'use strict';
 const fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto'), { execFileSync } = require('child_process');
 
-const API = () => process.env.GITHUB_API_URL || 'https://api.github.com';
-const GIT = () => process.env.GITHUB_GIT_URL || 'https://github.com';
+// Adresse GitHub de l'entreprise (portfolio/github.json › url) : github.com, GitHub Enterprise Cloud avec résidence des
+// données (<nom>.ghe.com) ou GitHub Enterprise Server (<hôte>, API sous /api/v3). Variables GITHUB_*_URL pour les tests.
+const RACINE = () => process.env.SIEGE_RACINE || path.resolve(__dirname, '..', '..');
+const URL_OK = /^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(:\d{2,5})?$/i;
+function hote(url) {
+  const u = String(url || 'https://github.com').trim().replace(/\/+$/, '');
+  if (!URL_OK.test(u)) refus('Adresse GitHub attendue : https://github.com, https://<nom>.ghe.com ou https://<serveur GitHub Enterprise>');
+  const h = new URL(u).host.toLowerCase();
+  if (h === 'github.com') return { type: 'github.com', web: 'https://github.com', api: 'https://api.github.com', git: 'https://github.com', domaines: ['github.com', 'api.github.com', 'codeload.github.com', '*.githubusercontent.com'] };
+  if (/\.ghe\.com$/.test(h)) return { type: 'ghe.com', web: 'https://' + h, api: 'https://api.' + h, git: 'https://' + h, domaines: [h, 'api.' + h, '*.' + h] };
+  return { type: 'serveur', web: 'https://' + h, api: 'https://' + h + '/api/v3', git: 'https://' + h, domaines: [h.split(':')[0]] };
+}
+function urlConfiguree() { try { return JSON.parse(fs.readFileSync(path.join(RACINE(), 'portfolio', 'github.json'), 'utf8')).url || ''; } catch { return ''; } }
+const API = () => process.env.GITHUB_API_URL || hote(urlConfiguree()).api;
+const GIT = () => process.env.GITHUB_GIT_URL || hote(urlConfiguree()).git;
 const PRIVE = () => process.env.SIEGE_PRIVE || path.join(os.homedir(), '.siege');
 const REPO = /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/;
 const BRANCHE = /^(feature|fix)\/[A-Za-z0-9._\/-]{1,80}$/;
@@ -81,4 +94,4 @@ async function fusionnable(jeton, repo, pr) {
   return { p, manque };
 }
 
-module.exports = { jwtApp, appel, config, repoDeFiliale, permissionsDuRole, jetonRole, pousser, fusionnable, ErreurGithub, BRANCHE, REPO };
+module.exports = { hote, urlConfiguree, jwtApp, appel, config, repoDeFiliale, permissionsDuRole, jetonRole, pousser, fusionnable, ErreurGithub, BRANCHE, REPO };

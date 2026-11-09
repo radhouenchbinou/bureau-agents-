@@ -14,7 +14,8 @@ const { questionsOuvertes } = require('./backlog');
 const exceptions = require('./lib/exceptions'), parametres = require('./lib/parametres'), skills = require('./lib/skills'), droits = require('./droits');
 const fs = require('fs'), os = require('os');
 const jira = require('./lib/jira'), integrations = require('./lib/integrations'), gh = require('./lib/github');
-const moteurs = require('./lib/moteurs');
+const moteurs = require('./lib/moteurs'), copilote = require('./lib/copilote');
+const tm = require('./lib/teams');
 const tg = require('./lib/telegram'), sl = require('./lib/slack'), demandes = require('./lib/demandes'), canaux = require('./lib/canaux'), { Messagerie, commun, communModifier } = require('./lib/messagerie');
 
 // Telegram : sujets dont le CEO est prévenu une fois chacun (questions d'agents, exceptions à décider)
@@ -25,7 +26,7 @@ async function sujetsCeo() {
   return out;
 }
 const messagerie = new Messagerie({ racine: cfg.F.racine, journal: m => console.log('[telegram] ' + m), extras: sujetsCeo });
-let botTelegram = '', equipeSlack = '';
+let botTelegram = '', equipeSlack = '', connexionTeams = null;   // connexion Teams en cours : { code, url, etat }
 
 // Derniers événements de la garde (refus, exceptions utilisées ou terminées), du plus récent au plus ancien
 function journalGarde(n = 40) {
@@ -76,6 +77,8 @@ async function etat() {
     telegram: (() => { const t = tg.lire(); return { actif: t.actif, jeton: !!tg.jeton(), bot: botTelegram, ceo: t.ceo, collaborateurs: t.collaborateurs, enAttente: t.enAttente }; })(),
     slack: (() => { const t = sl.lire(); return { actif: t.actif, jetonBot: !!sl.jetonBot(), jetonApp: !!sl.jetonApp(), disponible: sl.disponible(), equipe: equipeSlack,
       connecte: !!(messagerie.socket && messagerie.socket.ws && messagerie.socket.ws.readyState === 1), ceo: t.ceo, collaborateurs: t.collaborateurs, enAttente: t.enAttente, manifeste: sl.MANIFESTE }; })(),
+    teams: (() => { const t = tm.lire(); return { actif: t.actif, tenant: t.tenant, clientId: t.clientId, moi: t.moi, connecte: tm.connecte(), connexion: connexionTeams,
+      ceo: t.ceo, collaborateurs: t.collaborateurs, enAttente: t.enAttente }; })(),
     messagerie: (() => { const k = commun(); return { plafondJour: k.plafondJour || 50, sessionsAujourdhui: k.sessions[new Date().toISOString().slice(0, 10)] || 0,
       enCours: messagerie.enCours, file: messagerie.attente, canauxActifs: canaux.TOUS.filter(c => c.pret()).map(c => c.libelle) }; })(),
     demandes: demandes.lire().liste.slice(-200).reverse(),
@@ -85,6 +88,7 @@ async function etat() {
     // Modèles des sous-agents Claude Code, avec ce que le CEO a désactivé ; moteurs d'agents détectés sur la machine
     modeles: MODELES.map(m => ({ id: m, actif: !m || m === 'inherit' || moteurs.autorise('claude', m).ok })),
     moteurs: await moteurs.detecter(),
+    copilot: { ...copilote.lire(), jeton: !!copilote.jeton(), commande: copilote.commandeConnexion() },
     features: f, bugs: b, file: file(f.elements, b.elements), activite: act, questions: await questionsEnAttente(),
     droits: (() => { try { return vueDroits(); } catch (e) { return { erreur: e.message, roles: [], exceptions: [], journal: [], autorisations: { liste: [] }, skills: [] }; } })()
   };
@@ -184,10 +188,11 @@ async function action(op) {
       tg.modifier(s => { s.actif = !!op.oui; }); if (op.oui) messagerie.demarrer(); return { ok: true };
     }
     // Personnes d'un canal (Telegram : identifiant numérique ; Slack : U…) : CEO, collaborateur autorisé, retrait
-    case 'telegram.ceo': case 'telegram.autoriser': case 'slack.ceo': case 'slack.autoriser': {
+    case 'telegram.ceo': case 'telegram.autoriser': case 'slack.ceo': case 'slack.autoriser': case 'teams.ceo': case 'teams.autoriser': {
       const [nomCanal, quoi] = op.op.split('.'), c = canaux[nomCanal];
       const id = nomCanal === 'telegram' ? Number(op.id) : String(op.id || ''), nom = String(op.nom || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 80);
       if (nomCanal === 'slack' && !sl.ID.test(id)) refus('Identifiant Slack attendu (U…)');
+      if (nomCanal === 'teams' && !tm.GUID.test(id)) refus('Identifiant Microsoft 365 attendu');
       const p = c.modifier(s => {
         const meme = x => x && String(x.id) === String(id);
         const v = s.enAttente.find(meme) || s.collaborateurs.find(meme) || (meme(s.ceo) ? s.ceo : null);
@@ -202,13 +207,25 @@ async function action(op) {
       await c.envoyer(id, quoi === 'ceo' ? 'Vous êtes enregistré comme CEO : je vous préviendrai ici quand une décision vous revient.' : `Bonjour ${p.nom}, votre accès est ouvert. Écrivez-moi votre besoin (bug ou évolution) : je vous réponds ici.`).catch(() => {});
       return p;
     }
-    case 'telegram.retirer': case 'slack.retirer': {
+    case 'telegram.retirer': case 'slack.retirer': case 'teams.retirer': {
       const c = canaux[op.op.split('.')[0]], meme = x => x && String(x.id) === String(op.id);
       c.modifier(s => { s.collaborateurs = s.collaborateurs.filter(x => !meme(x)); s.enAttente = s.enAttente.filter(x => !meme(x)); if (meme(s.ceo)) s.ceo = null; }); return { ok: true };
     }
     case 'telegram.plafond': case 'messagerie.plafond': { const n = Number(op.n); if (!Number.isInteger(n) || n < 1 || n > 1000) refus('Plafond entre 1 et 1000 sessions par jour'); communModifier(s => { s.plafondJour = n; }); return { ok: true }; }
     // Slack (option) : app en Socket Mode, jetons du bot et de l'app
     case 'slack.jetons': sl.enregistrerJetons(op); return { ok: true };
+    // Teams (option) : app Entra + compte Directeur connecté par code d'appareil ; lecture par Graph, sans adresse publique
+    case 'teams.config': tm.configurer(op); return { ok: true };
+    case 'teams.connexion': {
+      const c = await tm.connexion(); connexionTeams = { code: c.code, url: c.url, etat: 'en_attente' };
+      c.attente.then(ok => { connexionTeams = ok ? null : { ...connexionTeams, etat: 'echec' }; if (ok && tm.lire().actif) messagerie.demarrer(); });
+      return { code: c.code, url: c.url };
+    }
+    case 'teams.deconnecter': tm.deconnecter(); connexionTeams = null; return { ok: true };
+    case 'teams.activer': {
+      if (op.oui && !(tm.connecte() && tm.lire().moi)) refus('Connectez d\'abord le compte Directeur');
+      tm.modifier(s => { s.actif = !!op.oui; }); if (op.oui) messagerie.demarrer(); return { ok: true };
+    }
     case 'slack.tester': { const r = await sl.appel('auth.test'); equipeSlack = r.team || ''; await sl.appel('apps.connections.open', {}, { app: true }); return { equipe: r.team, bot: r.user }; }
     case 'slack.activer': {
       if (op.oui && !sl.disponible()) refus('Slack demande Node 22 ou plus (WebSocket intégré)');
@@ -223,6 +240,17 @@ async function action(op) {
     case 'modele.activer': moteurs.activerModele(op.moteur, op.id, op.oui); return { ok: true };
     case 'modele.ajouter': moteurs.ajouterModele(op.moteur, op.id); return { ok: true };
     case 'modele.retirer': moteurs.retirerModele(op.moteur, op.id); return { ok: true };
+    // GitHub Copilot : connexion github.com ou GitHub Enterprise Cloud (ghe.com), jeton fin facultatif, test
+    case 'copilot.connexion': copilote.configurer(op); return { commande: copilote.commandeConnexion() };
+    case 'copilot.jeton': copilote.enregistrerJeton(op.jeton); return { ok: true };
+    case 'copilot.oublier': copilote.oublierJeton(); return { ok: true };
+    case 'copilot.tester': {
+      const x = copilote.executable();
+      const r = await new Promise(ok => require('child_process').execFile(x.cmd, [...x.avant, '-p', 'Réponds seulement : OK', '--silent', '--no-ask-user', '--model', 'auto'],
+        { env: copilote.env(), timeout: 90e3, windowsHide: true, cwd: os.tmpdir() }, (e, out, err) => ok({ ok: !e, sortie: String(out || '').trim().slice(0, 200), erreur: String(err || (e && e.message) || '').trim().split('\n').slice(-3).join(' ').slice(0, 300) })));
+      if (!r.ok) refus('Copilot ne répond pas : ' + (r.erreur || 'connexion à faire') + ` — dans un terminal : ${copilote.commandeConnexion()}`);
+      return r;
+    }
     case 'demande.relancer': { const x = demandes.lire().liste.find(y => y.id === op.id); if (!x || !demandes.ouverte(x)) refus('Demande close ou introuvable'); messagerie.planifier(x.id); return { ok: true }; }
     case 'backlog.importer':
     case 'notion.importer': {
@@ -283,7 +311,7 @@ const serveur = http.createServer(async (req, res) => {
       if (!egal(req.headers['x-siege-csrf'], CSRF) || !/^application\/json/.test(req.headers['content-type'] || '')) return envoyer(403, { erreur: 'Jeton de page manquant : rechargez la page' });
       let op; try { op = JSON.parse(await corps(req)); } catch { return envoyer(400, { erreur: 'Requête illisible' }); }
       try { return envoyer(200, { ok: true, resultat: (await action(op)) || null }); }
-      catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException || e instanceof integrations.ErreurIntegration || e instanceof gh.ErreurGithub || e instanceof tg.ErreurTelegram || e instanceof sl.ErreurSlack || e instanceof demandes.ErreurDemande || e instanceof moteurs.ErreurMoteur) return envoyer(400, { erreur: e.message }); throw e; }
+      catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException || e instanceof integrations.ErreurIntegration || e instanceof gh.ErreurGithub || e instanceof tg.ErreurTelegram || e instanceof sl.ErreurSlack || e instanceof tm.ErreurTeams || e instanceof demandes.ErreurDemande || e instanceof moteurs.ErreurMoteur || e instanceof copilote.ErreurCopilot) return envoyer(400, { erreur: e.message }); throw e; }
     }
     if (req.method !== 'GET') return envoyer(405, { erreur: 'Méthode refusée' });
     const rel = u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname).replace(/^\/+/, '');
@@ -295,6 +323,6 @@ const serveur = http.createServer(async (req, res) => {
 
 if (require.main === module) {
   serveur.listen(PORT, HOST, () => console.log(`Le Siège : http://${HOST}:${PORT}/  (racine ${cfg.F.racine})`));
-  if (tg.lire().actif || sl.lire().actif) messagerie.demarrer();
+  if (tg.lire().actif || sl.lire().actif || tm.lire().actif) messagerie.demarrer();
 }
 module.exports = { serveur, action, etat, messagerie };

@@ -41,6 +41,9 @@ async function appliquer({ silencieux = false } = {}) {
     if (!silencieux) console.log(`${a.nom.padEnd(16)} outils: ${e.outils.join(', ')}\n${''.padEnd(16)} skills: ${e.skills.join(', ')}`);
   }
   require('./lib/parametres').generer(RACINE);
+  // Mêmes agents pour GitHub Copilot CLI (.github/agents, .github/skills), garde en hook
+  const c = require('./lib/copilot-agents').generer(RACINE, p, attendu);
+  if (!silencieux) console.log(`\n.github/agents : ${c.length} agents Copilot générés ; .github/skills copié.`);
 }
 
 function matrice() {

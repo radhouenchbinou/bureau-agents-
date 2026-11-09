@@ -63,3 +63,14 @@ test('jeton par rôle, push sur branche autorisée seulement, fusion seulement a
     assert.deepStrictEqual(f.manque, []);
   } finally { srv.close(); delete process.env.GITHUB_GIT_URL; }
 });
+
+test('adresse GitHub : github.com, GitHub Enterprise Cloud (ghe.com) et Server', () => {
+  const { hote } = require('../lib/github');
+  assert.deepStrictEqual([hote('').api, hote('https://github.com/').git], ['https://api.github.com', 'https://github.com']);
+  const c = hote('https://Acme.ghe.com');
+  assert.deepStrictEqual([c.type, c.api, c.git, c.domaines], ['ghe.com', 'https://api.acme.ghe.com', 'https://acme.ghe.com', ['acme.ghe.com', 'api.acme.ghe.com', '*.acme.ghe.com']]);
+  const s = hote('https://github.entreprise.fr');
+  assert.deepStrictEqual([s.type, s.api, s.domaines], ['serveur', 'https://github.entreprise.fr/api/v3', ['github.entreprise.fr']]);
+  assert.throws(() => hote('http://github.entreprise.fr'), /https/);
+  assert.throws(() => hote('https://x.fr/chemin'), /Adresse GitHub/);
+});

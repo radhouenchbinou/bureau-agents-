@@ -88,7 +88,16 @@ function regles(politique, role) {
 // ---------- Décision ----------
 // action = { outil, entree } ; contexte = { racine, role, exceptions: [actives pour ce rôle] }
 // Renvoie { ok: true } ou { ok: false, raison, type, motif } (type/motif = de quoi faire une demande d'exception)
-function decider(politique, { outil, entree = {} }, { racine, role, exceptions = [] }) {
+// Copilot CLI (format compatible Claude) : shell Windows « powershell », chemins sous « path », barres obliques inversées
+function normaliser(outil, entree) {
+  if (/^(powershell|pwsh|shell|bash)$/i.test(outil)) outil = 'Bash';
+  if (outil === 'Bash' && typeof entree.command === 'string') entree = { ...entree, command: entree.command.replace(/\bsiege\\([a-z-]+\.js)\b/g, 'siege/$1') };
+  if (!entree.file_path && typeof entree.path === 'string' && ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(outil)) entree = { ...entree, file_path: entree.path };
+  if (outil === 'Agent') entree = { ...entree, subagent_type: entree.subagent_type || entree.agent_type || entree.agent || '', prompt: entree.prompt || entree.task || entree.description || '' };
+  return { outil, entree };
+}
+function decider(politique, brut, { racine, role, exceptions = [] }) {
+  const { outil, entree = {} } = normaliser(brut.outil, brut.entree || {});
   const R = regles(politique, role);
   if (!R) return { ok: false, raison: `Rôle inconnu de droits/roles.json : ${role}` };
   const exc = (type, ok) => exceptions.find(e => e.type === type && ok(e.motif));
@@ -161,4 +170,4 @@ function verifierMission(liaisons, session, entree) {
   return { ok: true, lier: session && !deja ? { ticket, etape, date: new Date().toISOString() } : null };
 }
 
-module.exports = { verifierMission, decouper, globVersRegex, correspond, charger, regles, decider };
+module.exports = { normaliser, verifierMission, decouper, globVersRegex, correspond, charger, regles, decider };

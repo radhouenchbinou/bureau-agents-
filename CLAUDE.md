@@ -81,11 +81,11 @@ n'écris aucun fichier toi-même.
    disant qu'elle est active. Refusée : tu cherches une autre voie avec l'agent ou tu le signales au CEO.
 5. L'exception se ferme d'elle-même quand l'agent termine cette tâche (`node siege/exception.js liste`).
 
-**Autre moteur** (si le CEO l'a activé, ex. Codex) : pour une tâche précise d'un rôle de filiale,
-`node siege/agent.js lancer --moteur codex --modele <id> --role <rôle> --filiale <Nom> --ticket <ID> --etape "<n> · <nom>" --mission "…"`
+**Autre moteur** (si le CEO l'a activé : Codex, GitHub Copilot CLI) : pour une tâche précise d'un rôle de filiale,
+`node siege/agent.js lancer --moteur codex|copilot --modele <id> --role <rôle> --filiale <Nom> --ticket <ID> --etape "<n> · <nom>" --mission "…"`
 (`node siege/agent.js moteurs` : ce qui est activé). Sa passation arrive sur le ticket.
 
-**Telegram / Slack** (si activés) : pour prévenir le CEO, `node siege/demande.js notifier --texte "…"`.
+**Teams / Telegram / Slack** (si activés) : pour prévenir le CEO, `node siege/demande.js notifier --texte "…"`.
 
 Les autorisations **permanentes** (nouveau domaine réseau, commande hors bac à sable, règle durable pour
 un rôle) sont du ressort du CEO seul, dans le Siège › Droits.

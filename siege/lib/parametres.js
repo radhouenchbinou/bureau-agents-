@@ -7,6 +7,10 @@ const fs = require('fs'), path = require('path');
 const { ErreurBacklog } = require('./backlog');
 
 const DOMAINES_BASE = ['github.com', 'api.github.com', 'codeload.github.com', '*.githubusercontent.com', 'api.notion.com'];
+// Hôte GitHub de l'entreprise (github.com par défaut, ou GitHub Enterprise : portfolio/github.json › url)
+function domainesGithub(racine) {
+  try { const u = JSON.parse(fs.readFileSync(path.join(racine, 'portfolio', 'github.json'), 'utf8')).url; return require('./github').hote(u).domaines; } catch { return []; }
+}
 const OUTILS_SIEGE = ['node siege/backlog.js *', 'node siege/github.js *', 'node siege/exception.js *', 'node siege/demande.js *', 'node siege/filiale.js *', 'node siege/agent.js *'];   // lisent les secrets : hors bac à sable, filtrés par la garde
 const TYPES = {
   domaine: { libelle: 'Domaine réseau autorisé', motif: /^(\*\.)?([a-z0-9-]+\.)+[a-z]{2,}$/i },
@@ -40,7 +44,7 @@ function settings(racine) {
       failIfUnavailable: a.sandbox_obligatoire,
       allowUnsandboxedCommands: false,
       excludedCommands: [...OUTILS_SIEGE, ...de('commande')],
-      network: { allowedDomains: [...DOMAINES_BASE, ...de('domaine')] },
+      network: { allowedDomains: [...new Set([...DOMAINES_BASE, ...domainesGithub(racine), ...de('domaine')])] },
       filesystem: {
         denyRead: ['~/.siege', '~/.ssh', '~/.aws', '~/.config/gh', '~/.netrc'],
         denyWrite: ['./droits', './.claude', './siege', './portfolio/features.json', './portfolio/bugs.json', './portfolio/commentaires.json', './portfolio/source-backlog.json']

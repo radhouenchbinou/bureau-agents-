@@ -9,7 +9,7 @@
 //    push (facultatif, --pousser) passe par node siege/github.js avec le jeton du rôle.
 'use strict';
 const fs = require('fs'), path = require('path'), os = require('os'), { spawn, execFileSync } = require('child_process');
-const moteurs = require('./lib/moteurs'), { filiales } = require('./lib/registre'), cfg = require('./lib/config');
+const moteurs = require('./lib/moteurs'), copilote = require('./lib/copilote'), { filiales } = require('./lib/registre'), cfg = require('./lib/config');
 
 const RACINE = process.env.SIEGE_RACINE || path.resolve(__dirname, '..');
 const ROLES = ['product-owner', 'dev-backend', 'dev-frontend', 'qa', 'tech-writer'];   // rôles qui travaillent dans le repo d'une filiale
@@ -17,7 +17,7 @@ const DUREE_MAX_MS = 30 * 60e3;
 const AIDE = `Agents d'un autre moteur — usage : node siege/agent.js <commande>
 
   moteurs                                   moteurs installés, modèles et ce que le CEO a activé
-  lancer --moteur codex --modele <id> --role <rôle> --filiale "<Nom>" --ticket <ID> --etape "<n> · <nom>"
+  lancer --moteur codex|copilot --modele <id> --role <rôle> --filiale "<Nom>" --ticket <ID> --etape "<n> · <nom>"
          --mission "<la tâche précise>" [--pousser feature/<ID>]
      Rôles : ${ROLES.join(', ')}. L'agent travaille dans le repo de la filiale, sans réseau ;
      sa passation est inscrite sur le ticket ; --pousser pousse ensuite la branche avec le jeton du rôle.
@@ -65,6 +65,7 @@ async function lancer(o) {
   if (!fs.existsSync(path.join(dossier, 'CLAUDE.md'))) refus(`Fiche absente : ${f.dossier}/CLAUDE.md (lancer /nouvelle-filiale d'abord)`);
 
   const prive = process.env.SIEGE_PRIVE || path.join(os.homedir(), '.siege'); fs.mkdirSync(prive, { recursive: true, mode: 0o700 });
+  if (nomMoteur === 'copilot') return copilot({ m, mod, o, f, dossier, prive, mission });
   const dernier = path.join(prive, `agent-${o.ticket}-${Date.now()}.txt`), journal = fs.openSync(path.join(prive, 'agents-externes.log'), 'a');
   fs.writeSync(journal, `\n=== ${new Date().toISOString()} ${nomMoteur}/${mod.id} ${o.role} ${o.ticket} étape ${o.etape}\n`);
   // Codex : session éphémère, bac à sable « workspace-write » sur le repo de la filiale, réseau coupé, config utilisateur ignorée
@@ -83,7 +84,35 @@ async function lancer(o) {
   const duree = Math.round((Date.now() - debut) / 1000);
   if (code !== 0 && !passation) refus(`${m.libelle} s'est arrêté (code ${code}, ${duree} s) sans passation : voir ~/.siege/agents-externes.log`);
 
-  // Passation inscrite sur le ticket au nom du rôle (l'agent externe n'a pas accès au backlog)
+  return terminer({ m, mod, o, f, duree, code, passation });
+}
+
+// GitHub Copilot CLI : l'agent du rôle (.github/agents du Siège, chargé par --add-dir) porte la garde en hook, avec
+// SIEGE_ROLE posé ici ; écriture et commandes passent par la garde ; outil web refusé ; connexion github.com ou ghe.com.
+async function copilot({ m, mod, o, f, dossier, prive, mission }) {
+  if (!fs.existsSync(path.join(RACINE, '.github', 'agents', o.role + '.agent.md'))) refus(`Agent Copilot absent : .github/agents/${o.role}.agent.md (node siege/droits.js appliquer)`);
+  const journal = fs.openSync(path.join(prive, 'agents-externes.log'), 'a');
+  fs.writeSync(journal, `\n=== ${new Date().toISOString()} copilot/${mod.id} ${o.role} ${o.ticket} étape ${o.etape}\n`);
+  const x = copilote.executable();
+  const args = [...x.avant, '-p', consigne({ role: o.role, filiale: f, ticket: o.ticket, etape: o.etape, mission, moteur: `${m.libelle} (${mod.id})` }),
+    '--agent', o.role, '--add-dir', RACINE, '--model', mod.id, '--silent', '--no-ask-user', '--trust-folder',
+    '--allow-tool', 'write', '--allow-tool', 'shell', '--deny-tool', 'url'];
+  const env = { ...copilote.env(), SIEGE_RACINE: RACINE, SIEGE_ROLE: o.role, SIEGE_PRIVE: prive };
+  const debut = Date.now(); let sortie = '';
+  const code = await new Promise((ok, ko) => {
+    const p = spawn(x.cmd, args, { cwd: dossier, env, stdio: ['ignore', 'pipe', journal], windowsHide: true });
+    p.stdout.on('data', d => { sortie += d; fs.writeSync(journal, d); });
+    const t = setTimeout(() => p.kill('SIGTERM'), DUREE_MAX_MS);
+    p.on('error', e => { clearTimeout(t); ko(new ErreurAgent(`${m.libelle} n'a pas pu démarrer : ${e.message}`)); });
+    p.on('exit', c => { clearTimeout(t); ok(c); });
+  });
+  fs.closeSync(journal);
+  const passation = sortie.trim().split('\n').slice(-40).join('\n'), duree = Math.round((Date.now() - debut) / 1000);
+  if (code !== 0 && !passation) refus(`${m.libelle} s'est arrêté (code ${code}, ${duree} s) : connexion faite ? (${copilote.commandeConnexion()}) — voir ~/.siege/agents-externes.log`);
+  return terminer({ m, mod, o, f, duree, code, passation });
+}
+// Passation inscrite sur le ticket au nom du rôle, push facultatif avec le jeton du rôle (communs aux moteurs externes)
+async function terminer({ m, mod, o, f, duree, code, passation }) {
   const n = /^BUG-/.test(o.ticket) ? 'bugs' : 'features';
   await cfg.source(n).commenter(o.ticket, { auteur: o.role, texte: `Passation (${m.libelle} ${mod.id}, ${duree} s) · ${passation.replace(/\s+/g, ' ').slice(0, 1800) || '(aucun message)'}` });
   let pousse = '';
@@ -109,5 +138,5 @@ async function main(argv) {
   }
   refus('Commande inconnue : ' + cmd + '\n\n' + AIDE);
 }
-if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurAgent || e instanceof moteurs.ErreurMoteur || e.name === 'ErreurBacklog' ? 'Erreur : ' + e.message : e); process.exit(1); });
+if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurAgent || e instanceof moteurs.ErreurMoteur || e instanceof copilote.ErreurCopilot || e.name === 'ErreurBacklog' ? 'Erreur : ' + e.message : e); process.exit(1); });
 module.exports = { main, lancer, consigne, ROLES };

@@ -16,7 +16,8 @@ function ecrireAtomique(f, contenu, mode) {
 }
 
 // repos : { "<dossier du repo local, colonne Repo git du registre>": "owner/repo" } ; seuls les dossiers des filiales
-function configurerGithub(racine, filiales, { app_id, installation_id, repos = {} }) {
+function configurerGithub(racine, filiales, { url = 'https://github.com', app_id, installation_id, repos = {} }) {
+  const h = gh.hote(url);   // refuse une adresse invalide
   if (!/^\d{1,12}$/.test(String(app_id || ''))) refus('App ID : nombre attendu (page de l\'App › About)');
   if (!/^\d{1,14}$/.test(String(installation_id || ''))) refus('Installation ID : nombre attendu (fin de l\'URL d\'installation)');
   const dossiers = new Set(filiales.map(f => f.repo).filter(r => r && r !== '—')), propre = {};
@@ -26,8 +27,9 @@ function configurerGithub(racine, filiales, { app_id, installation_id, repos = {
     if (!gh.REPO.test(r)) refus(`Repo GitHub attendu au format compte/repo : ${r}`);
     propre[d] = r;
   }
-  ecrireAtomique(F_GH(racine), JSON.stringify({ app_id: Number(app_id), installation_id: Number(installation_id), repos: propre }, null, 2) + '\n');
-  return { repos: Object.keys(propre).length };
+  ecrireAtomique(F_GH(racine), JSON.stringify({ url: h.web, app_id: Number(app_id), installation_id: Number(installation_id), repos: propre }, null, 2) + '\n');
+  try { require('./parametres').generer(racine); } catch {}   // le bac à sable autorise l'hôte GitHub choisi
+  return { repos: Object.keys(propre).length, type: h.type };
 }
 
 function enregistrerCle(prive, pem) {
@@ -57,7 +59,7 @@ function vue({ racine, prive, source, jetonNotion, jetonJira, filiales }) {
     actif: source.type,
     notion: { jeton: !!jetonNotion, configure: !!(source.bases && source.bases.features && source.bases.bugs) },
     jira: { jeton: !!jetonJira, config: j },
-    github: { configure: !!g, cle: fs.existsSync(F_PEM(prive)), app_id: g ? g.app_id : '', installation_id: g ? g.installation_id : '',
+    github: { configure: !!g, url: g && g.url || 'https://github.com', type: gh.hote(g && g.url).type, cle: fs.existsSync(F_PEM(prive)), app_id: g ? g.app_id : '', installation_id: g ? g.installation_id : '',
       repos: g ? g.repos || {} : {}, dossiers: [...new Set(filiales.map(f => f.repo).filter(r => r && r !== '—'))] }
   };
 }

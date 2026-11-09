@@ -37,6 +37,7 @@
 
   // ---------- Rendu global ----------
   function rendre() {
+    if (!E) return;   // données pas encore chargées (onglet cliqué pendant le premier chargement)
     const f = E.features.elements, b = E.bugs.elements, act = E.activite.missions.filter(m => m.etat === 'au_poste');
     vider($('#counts'),
       h('span', {}, h('b', { text: f.filter(x => x.statut === 'Livré').length + '/' + f.length }), 'features livrées'),
@@ -236,7 +237,7 @@
     const ajout = {};
     return h('div', { class: 'carte' }, h('div', { class: 'barre' }, h('h3', { text: 'Moteurs d\'agents et modèles' }),
         btn2('Détecter à nouveau', () => act({ op: 'moteurs.detecter' }, 'Moteurs détectés'))),
-      h('p', { class: 'aide', text: 'Ce qui est installé sur cette machine. Claude Code fait tourner le directeur et ses sous-agents ; un autre moteur (Codex) reçoit du directeur une tâche précise d\'un ticket (node siege/agent.js), dans le repo de la filiale, sans réseau. Un moteur ou un modèle désactivé est refusé par la garde et par l\'outil.' }),
+      h('p', { class: 'aide', text: 'Ce qui est installé sur cette machine. Claude Code fait tourner le directeur et ses sous-agents ; un autre moteur (Codex, GitHub Copilot CLI) reçoit du directeur une tâche précise d\'un ticket (node siege/agent.js), dans le repo de la filiale, sous la garde du Siège. Un moteur ou un modèle désactivé est refusé par la garde et par l\'outil.' }),
       h('div', { class: 'moteurs' }, E.moteurs.map(m => h('div', { class: 'moteur' + (m.actif ? '' : ' eteint') },
         h('div', { class: 'barre' }, h('b', { text: m.libelle }), ' ',
           m.installe ? h('span', { class: 'muted mono', text: m.version }) : h('span', { class: 'tag attente', text: 'non installé' }),
@@ -444,6 +445,7 @@
     setTimeout(majMail);
 
     // GitHub
+    const gUrl = h('input', { value: G.url || 'https://github.com', placeholder: 'https://github.com ou https://<nom>.ghe.com ou https://github.entreprise.fr', 'aria-label': 'Adresse GitHub' });
     const gApp = h('input', { value: G.app_id || '', placeholder: '123456', inputmode: 'numeric' }), gInst = h('input', { value: G.installation_id || '', placeholder: '98765432', inputmode: 'numeric' });
     const gRepos = Object.fromEntries(G.dossiers.map(d => [d, h('input', { value: G.repos[d] || '', placeholder: 'compte/repo' })]));
     const pem = h('textarea', { placeholder: '-----BEGIN RSA PRIVATE KEY-----\n…', 'aria-label': 'Clé privée de l\'App', rows: 3, autocomplete: 'off' });
@@ -452,10 +454,11 @@
     const retourG = h('div', { class: 'aide' });
     const github = h('div', { class: 'carte' }, h('h3', {}, 'GitHub ', etat(G.configure && G.cle, 'App configurée', 'non branché')),
       h('ol', { class: 'aide' },
-        h('li', {}, 'Créez une App GitHub (', h('a', { href: 'https://github.com/settings/apps/new', target: '_blank', rel: 'noopener', text: 'github.com/settings/apps/new' }), ') : Contents, Pull requests, Commit statuses en lecture-écriture, Metadata en lecture. Installez-la sur les repos des filiales seulement.'),
+        h('li', { text: 'Adresse GitHub : github.com, ou celle de votre GitHub Enterprise (Cloud avec résidence des données : https://<nom>.ghe.com ; Server : https://<votre serveur>). API, push et réseau du bac à sable suivent cette adresse.' }),
+        h('li', {}, 'Créez une App GitHub (', h('a', { href: (G.url || 'https://github.com') + '/settings/apps/new', target: '_blank', rel: 'noopener', text: (G.url || 'https://github.com').replace('https://', '') + '/settings/apps/new' }), ', ou dans les réglages de l\'organisation) : Contents, Pull requests, Commit statuses en lecture-écriture, Metadata en lecture. Installez-la sur les repos des filiales seulement.'),
         h('li', { text: 'Renseignez l\'App ID, l\'Installation ID et la clé privée (.pem, gardée dans ~/.siege, jamais dans le dépôt), puis le repo GitHub de chaque filiale. Chaque agent reçoit un jeton d\'une heure limité à un repo et à son rôle.' })),
-      h('div', { class: 'grille2' }, champ('App ID', gApp), champ('Installation ID', gInst), G.dossiers.map(d => champ('Repo de ' + d, gRepos[d]))),
-      h('div', { class: 'barre' }, h('button', { type: 'button', class: 'btn prim', text: 'Enregistrer', onclick: () => act({ op: 'github.config', app_id: gApp.value, installation_id: gInst.value, repos: Object.fromEntries(Object.entries(gRepos).map(([k, el]) => [k, el.value.trim()])) }, 'GitHub enregistré').catch(() => {}) })),
+      h('div', { class: 'grille2' }, champ('Adresse GitHub', gUrl), champ('App ID', gApp), champ('Installation ID', gInst), G.dossiers.map(d => champ('Repo de ' + d, gRepos[d]))),
+      h('div', { class: 'barre' }, h('button', { type: 'button', class: 'btn prim', text: 'Enregistrer', onclick: () => act({ op: 'github.config', url: gUrl.value.trim(), app_id: gApp.value, installation_id: gInst.value, repos: Object.fromEntries(Object.entries(gRepos).map(([k, el]) => [k, el.value.trim()])) }, 'GitHub enregistré').catch(() => {}) })),
       champ(G.cle ? 'Remplacer la clé privée' : 'Clé privée de l\'App', pem), h('div', { class: 'barre' }, fichierPem,
         h('button', { type: 'button', class: 'btn', text: 'Enregistrer la clé', onclick: () => act({ op: 'github.cle', pem: pem.value }, 'Clé enregistrée').then(() => { pem.value = ''; fichierPem.value = ''; }).catch(() => {}) }),
         h('button', { type: 'button', class: 'btn', text: 'Tester la connexion', disabled: !(G.configure && G.cle), onclick: () => act({ op: 'github.tester' }).then(r => { retoursInteg.github = r; rendreReglages(); }).catch(() => {}) })), retourG);
@@ -475,7 +478,7 @@
       h('h4', { text: 'Collaborateurs autorisés (' + X.collaborateurs.length + ')' }),
       X.collaborateurs.length ? h('ul', {}, X.collaborateurs.map(c => pers(c, btn('Retirer', { op: nom + '.retirer', id: c.id }, 'Accès retiré')))) : h('p', { class: 'aide', text: 'Aucun.' })];
     const messagerieC = h('div', { class: 'carte' }, h('h3', {}, 'Messagerie des collaborateurs ', etat(M.canauxActifs.length, M.canauxActifs.join(' + ') || '', 'inactive')),
-      h('p', { class: 'aide', text: 'Option, sur Telegram et/ou Slack : les collaborateurs écrivent au directeur (bug, évolution) ; chaque message lance une courte session du directeur, qui leur répond, leur fait valider un résumé, crée le ticket et vous transmet ce qui doit l\'être. Il vous prévient aussi des questions d\'agents et des exceptions à décider (que vous tranchez toujours ici). Les collaborateurs n\'ont jamais accès au Siège.' }),
+      h('p', { class: 'aide', text: 'Option, sur Teams, Telegram et/ou Slack : les collaborateurs écrivent au directeur (bug, évolution) ; chaque message lance une courte session du directeur, qui leur répond, leur fait valider un résumé, crée le ticket et vous transmet ce qui doit l\'être. Il vous prévient aussi des questions d\'agents et des exceptions à décider (que vous tranchez toujours ici). Les collaborateurs n\'ont jamais accès au Siège.' }),
       h('div', { class: 'barre' }, h('span', { class: 'aide', text: 'Sessions automatiques du directeur (tous canaux) : ' + M.sessionsAujourdhui + ' aujourd\'hui, plafond par jour ' }), plaf,
         btn2('Enregistrer', () => act({ op: 'messagerie.plafond', n: Number(plaf.value) }, 'Plafond enregistré'))));
 
@@ -506,7 +509,39 @@
       S.equipe ? h('p', { class: 'aide', text: 'Espace Slack : ' + S.equipe }) : null,
       personnes('slack', S, 'Une personne apparaît ici dès qu\'elle écrit au bot en message direct.'));
 
-    vider($('#v-reglages'), sources, messagerieC, telegram, slack, jiraC, notion, github,
+    // GitHub Copilot : connexion comme dans l'extension Copilot des IDE (github.com ou GitHub Enterprise Cloud)
+    const C = E.copilot, cMode = h('select', { 'aria-label': 'Connexion Copilot' }, [['github.com', 'GitHub.com'], ['ghe.com', 'GitHub Enterprise Cloud (<nom>.ghe.com)']].map(([v, t]) => h('option', { value: v, text: t, selected: C.connexion === v })));
+    const cHote = h('input', { value: C.hote || '', placeholder: 'entreprise.ghe.com', 'aria-label': 'Adresse GitHub Enterprise Cloud' }), cJeton = mot('github_pat_… (facultatif)', 'Jeton Copilot');
+    const majHote = () => { cHote.closest('label').hidden = cMode.value !== 'ghe.com'; }; cMode.onchange = majHote; setTimeout(majHote);
+    const copilotC = h('div', { class: 'carte' }, h('h3', {}, 'GitHub Copilot ', etat(E.moteurs.some(m => m.nom === 'copilot' && m.installe), 'CLI installé', 'CLI non installé')),
+      h('p', { class: 'aide', text: 'Pour les agents Copilot (Siège › Agents › Moteurs). Connexion comme dans l\'extension Copilot de votre IDE : GitHub.com, ou l\'adresse de votre GitHub Enterprise Cloud.' }),
+      h('div', { class: 'grille2' }, champ('Connexion', cMode), champ('Adresse', cHote)),
+      h('div', { class: 'barre' }, btn2('Enregistrer', () => act({ op: 'copilot.connexion', connexion: cMode.value, hote: cHote.value }, 'Connexion Copilot enregistrée'))),
+      h('ol', { class: 'aide' },
+        h('li', {}, 'Une fois sur ce poste, dans un terminal : ', h('code', { text: C.commande }), ' (navigateur ou code d\'appareil ; le jeton reste dans le gestionnaire d\'identification du système).'),
+        h('li', { text: 'Ou, sans session ouverte, un jeton fin (github_pat_…) avec la permission « Copilot Requests » : gardé dans ~/.siege, jamais renvoyé à la page. Les jetons classiques (ghp_…) ne sont pas acceptés par Copilot CLI.' })),
+      h('div', { class: 'barre' }, cJeton, btn2(C.jeton ? 'Remplacer le jeton' : 'Enregistrer le jeton', () => act({ op: 'copilot.jeton', jeton: cJeton.value }, 'Jeton Copilot enregistré').then(() => { cJeton.value = ''; })),
+        C.jeton ? btn2('Oublier le jeton', () => act({ op: 'copilot.oublier' }, 'Jeton oublié')) : null,
+        btn2('Tester (1 requête)', () => act({ op: 'copilot.tester' }).then(r => toast('Copilot répond : ' + r.sortie)))));
+
+    // Teams : compte Directeur (Microsoft 365) lu par Graph, sans adresse publique
+    const TM = E.teams, tTen = h('input', { value: TM.tenant || '', placeholder: 'entreprise.onmicrosoft.com ou ID d\'annuaire', 'aria-label': 'Tenant' }), tCli = h('input', { value: TM.clientId || '', placeholder: '00000000-0000-0000-0000-000000000000', 'aria-label': 'ID d\'application' });
+    const teamsC = h('div', { class: 'carte' }, h('h3', {}, 'Microsoft Teams ', etat(TM.actif && TM.connecte, 'actif', TM.connecte ? 'inactif' : 'non branché')),
+      h('ol', { class: 'aide' },
+        h('li', { text: 'Avec votre administrateur Microsoft 365 : un compte dédié « Directeur » (licence Teams) et une inscription d\'application Entra : client public autorisé (Allow public client flows), permissions déléguées User.Read, Chat.ReadWrite et offline_access, consentement de l\'administrateur. Aucune adresse publique n\'est nécessaire : le Siège lit les conversations par Microsoft Graph.' }),
+        h('li', { text: 'Renseignez le tenant et l\'ID d\'application, puis « Connecter le compte Directeur » : ouvrez le lien, saisissez le code et connectez-vous avec ce compte (aucun mot de passe n\'est gardé).' }),
+        h('li', { text: 'Activez. Écrivez au compte Directeur dans Teams depuis votre compte, désignez-vous CEO ; chaque collaborateur lui écrit, vous l\'autorisez. Pas de boutons sur Teams : on répond « oui » / « non », et vous « accepter DEM-… », « refuser DEM-… » ou « DEM-… : consigne ».' })),
+      h('div', { class: 'grille2' }, champ('Tenant', tTen), champ('ID d\'application (client)', tCli)),
+      h('div', { class: 'barre' }, btn2('Enregistrer', () => act({ op: 'teams.config', tenant: tTen.value, clientId: tCli.value }, 'Teams enregistré')),
+        btn2(TM.connecte ? 'Reconnecter le compte Directeur' : 'Connecter le compte Directeur', () => act({ op: 'teams.connexion' }).then(() => {}), !(TM.tenant && TM.clientId)),
+        TM.connecte ? btn2('Déconnecter', () => act({ op: 'teams.deconnecter' }, 'Compte déconnecté')) : null,
+        btn2(TM.actif ? 'Désactiver' : 'Activer', () => act({ op: 'teams.activer', oui: !TM.actif }, TM.actif ? 'Teams désactivé' : 'Teams activé'), !TM.connecte, TM.actif ? '' : 'prim')),
+      TM.connexion && TM.connexion.etat === 'en_attente' ? h('p', { class: 'attention' }, 'Ouvrez ', h('a', { href: TM.connexion.url, target: '_blank', rel: 'noopener', text: TM.connexion.url }), ' et saisissez le code ', h('b', { class: 'mono', text: TM.connexion.code }), ' (connexion avec le compte Directeur).') : null,
+      TM.connexion && TM.connexion.etat === 'echec' ? h('p', { class: 'attention', text: 'La connexion n\'a pas abouti (code expiré ou refusé) : recommencez.' }) : null,
+      TM.moi ? h('p', { class: 'aide', text: 'Connecté : ' + TM.moi.nom }) : null,
+      personnes('teams', TM, 'Une personne apparaît ici dès qu\'elle écrit au compte Directeur dans Teams.'));
+
+    vider($('#v-reglages'), sources, copilotC, messagerieC, teamsC, telegram, slack, jiraC, notion, github,
       h('div', { class: 'carte' }, h('h3', { text: 'Siège' }), h('p', { class: 'mono muted', text: E.racine }),
         h('p', { class: 'aide', text: 'Jetons et clé privée restent sur ce poste (~/.siege, droits 600) et ne sont jamais renvoyés à la page.' })));
   }

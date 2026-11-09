@@ -7,7 +7,7 @@
 //  - une seule file de sessions du directeur et un seul plafond par jour, tous canaux confondus (~/.siege/messagerie.json).
 'use strict';
 const fs = require('fs'), path = require('path'), os = require('os'), { spawn } = require('child_process');
-const tg = require('./telegram'), sl = require('./slack'), dem = require('./demandes'), canaux = require('./canaux');
+const tg = require('./telegram'), sl = require('./slack'), tm = require('./teams'), dem = require('./demandes'), canaux = require('./canaux');
 
 const PAR_HEURE = 20;            // messages acceptés par collaborateur et par heure
 const SESSION_MAX_MS = 10 * 60e3;
@@ -72,7 +72,7 @@ class Messagerie {
       const l = dem.lire().liste.filter(dem.ouverte);
       return c.envoyer(de.id, l.length ? l.map(x => `${x.id} · ${x.statut} · ${x.auteur.nom} · ${(x.resume || x.messages[0].texte).slice(0, 60)}`).join('\n') : 'Aucune demande ouverte.');
     }
-    return c.envoyer(de.id, 'Bonjour. Je vous écris ici quand une décision vous revient. Répondez à une de mes notifications (en fil sur Slack) pour qu\'elle aille à la bonne demande. /demandes : demandes ouvertes.');
+    return c.envoyer(de.id, 'Bonjour. Je vous écris ici quand une décision vous revient. Répondez à une de mes notifications (en fil sur Slack ; « DEM-… : consigne » sur Teams) pour qu\'elle aille à la bonne demande. /demandes : demandes ouvertes.');
   }
   // ev = { de: id, data, repondre(texte) }
   async bouton(c, ev) {
@@ -122,6 +122,28 @@ class Messagerie {
     return this.message(c, { de, texte: ev.texte, prive: ev.prive, reponseA: ev.reponseA });
   }
 
+  // ---------- Teams : messages texte ; « oui » / « non », « accepter DEM-… », « DEM-… : consigne » ----------
+  async teams(ev) {
+    const c = canaux.teams, e = c.lire(), t = String(ev.texte || '').trim(), de = ev.de;
+    const estCeo = e.ceo && e.ceo.id === de.id, collab = e.collaborateurs.find(x => x.id === de.id);
+    const repondre = texte => c.envoyer(de.id, texte).catch(() => {});
+    if (collab && /^(oui|non)\b[\s.!]*$/i.test(t)) {
+      const l = dem.lire().liste.filter(x => x.auteur.id === c.cle(de.id) && x.statut === 'À valider');
+      if (l.length === 1) return this.bouton(c, { de: de.id, data: `v:${l[0].id}:${/^oui/i.test(t) ? 1 : 0}`, repondre });
+    }
+    if (estCeo) {
+      let m = /^(accepter|refuser)\s+(DEM-\d{3,5})\b/i.exec(t);
+      if (m) return this.bouton(c, { de: de.id, data: `c:${m[2].toUpperCase()}:${/^accepter/i.test(m[1]) ? 1 : 0}`, repondre });
+      m = /^(DEM-\d{3,5})\s*[:\-–]\s*([\s\S]+)$/i.exec(t);
+      if (m) {
+        const id = m[1].toUpperCase();
+        try { dem.ceo(id, { texte: m[2] }); } catch (err) { return repondre(err.message); }
+        await repondre(`${id} · Consigne transmise au directeur.`); return this.planifier(id);
+      }
+    }
+    return this.message(c, { de, texte: t, prive: true, reponseA: '' });
+  }
+
   // ---------- Sessions du directeur : une à la fois, plafond commun par jour ----------
   planifier(id) { if (!this.attente.includes(id)) this.attente.push(id); this.suivant(); }
   async suivant() {
@@ -160,6 +182,16 @@ class Messagerie {
       encore(); setInterval(() => this.veille(), 60e3);
     }
     this.demarrerSlack();
+    this.demarrerTeams();
+  }
+  demarrerTeams() {
+    if (this.boucleTeams) return; this.boucleTeams = true; let n = 0;
+    const encore = async () => {
+      let ok = false;
+      if (canaux.teams.pret()) { try { ok = await tm.tour(ev => this.teams(ev), { listerChats: n++ % 12 === 0 }); } catch (err) { this.journal('Teams : ' + err.message); } }
+      setTimeout(encore, ok ? 5e3 : 15e3);
+    };
+    encore();
   }
   demarrerSlack() {
     if (this.socket || !canaux.slack.pret() || !sl.jetonApp()) return;

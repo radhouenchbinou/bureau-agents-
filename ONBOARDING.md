@@ -15,7 +15,7 @@ Neuf étapes, dont trois facultatives. Seules les étapes 1 à 4 et 8 sont néce
 | 4 | Brancher le backlog | Siège › Intégrations | Oui (fichiers par défaut) | Features et Bugs dans Notion, Jira ou fichiers |
 | 5 | Brancher GitHub | Siège › Intégrations | Pour pousser et fusionner | App GitHub, un jeton par rôle et par repo |
 | 6 | Droits, skills, autorisations | Siège › Droits | Relecture conseillée | Chaque agent n'a que les droits de son rôle |
-| 7 | Telegram et/ou Slack | Siège › Intégrations | Non | Collaborateurs et notifications du CEO |
+| 7 | Teams, Telegram et/ou Slack | Siège › Intégrations | Non | Collaborateurs et notifications du CEO |
 | 8 | Premier circuit | Claude Code `/feature` | Oui | Une feature menée étape par étape |
 | 9 | Routine du CEO | Siège + GitHub + Telegram | — | Questions, exceptions, priorités, fusions |
 
@@ -89,7 +89,8 @@ Terminez par **Importer le backlog local dans la source active** si vous avez d�
 Les agents agissent sur GitHub au nom d'une App de l'entreprise, avec un jeton d'une heure limité au repo de leur
 mission et aux droits de leur rôle ; ils ne voient jamais ni la clé ni le jeton.
 
-1. Créez l'App sur [github.com/settings/apps/new](https://github.com/settings/apps/new) : permissions *Contents*,
+1. Indiquez d'abord l'**adresse GitHub** de l'entreprise (github.com, `https://<nom>.ghe.com` ou votre serveur GitHub
+   Enterprise). Créez l'App sur `<adresse>/settings/apps/new` (ou dans l'organisation) : permissions *Contents*,
    *Pull requests* et *Commit statuses* en lecture-écriture, *Metadata* en lecture, sans webhook.
 2. Installez-la **uniquement** sur les repos de vos filiales ; notez l'*App ID* et l'*Installation ID* (fin de l'URL
    d'installation), téléchargez la clé privée `.pem`.
@@ -116,11 +117,18 @@ action ; le réseau est limité à GitHub et Notion. Ouvrez **Siège › Droits*
 - **Contexte propre** : chaque tâche d'agent part d'un contexte neuf, et chaque étape du directeur se fait dans une
   nouvelle session ; ce qui doit survivre passe par les fichiers et la passation sur le ticket.
 
-## 7. Telegram et/ou Slack (facultatif)
+## 7. Teams, Telegram et/ou Slack (facultatif)
 
 Vos collaborateurs écrivent au directeur sur Telegram ou sur Slack pour signaler un bug ou demander une évolution ; ils
 n'ont jamais accès au Siège. Le directeur vous prévient aussi, sur chaque canal où vous êtes enregistré, quand une
 décision vous revient. Les deux canaux font la même chose et partagent la même file et le même plafond.
+
+**Microsoft Teams** (aucune adresse publique) : avec votre administrateur Microsoft 365, un compte dédié « Directeur »
+et une inscription d'application Entra (client public autorisé ; permissions déléguées User.Read, Chat.ReadWrite,
+offline_access ; consentement de l'administrateur). Dans **Siège › Intégrations › Microsoft Teams** : tenant, ID
+d'application, **Connecter le compte Directeur** (code d'appareil), **Activer**. Écrivez-lui dans Teams, désignez-vous
+CEO, autorisez vos collaborateurs. On valide en répondant « oui » / « non » ; vous décidez par « accepter DEM-… »,
+« refuser DEM-… » ou « DEM-… : consigne ».
 
 **Telegram :**
 
@@ -146,6 +154,13 @@ lance une courte session du directeur.
 Le directeur pose ses questions, fait valider un résumé au demandeur, vous transmet ce qui le mérite (évolution,
 plusieurs filiales, sécurité, argent, doute), puis crée le ticket sans rang : c'est vous qui priorisez. Suivi dans
 l'onglet **Demandes**. Le Siège doit tourner sur une machine allumée, avec Claude Code installé.
+
+## 7 bis. GitHub Copilot et Codex comme moteurs d'agents (facultatif)
+
+Si Copilot CLI ou Codex est installé, **Siège › Agents › Moteurs d'agents** les liste avec leurs modèles : activez ceux
+que le directeur peut utiliser pour une tâche précise d'un rôle de filiale. Pour Copilot, connectez-le dans **Siège ›
+Intégrations › GitHub Copilot** : GitHub.com ou GitHub Enterprise Cloud (`<nom>.ghe.com`), par `copilot login` (une fois)
+ou un jeton fin `github_pat_…` (permission « Copilot Requests »).
 
 ## 8. Lancer le premier circuit
 

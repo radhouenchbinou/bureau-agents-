@@ -42,7 +42,9 @@ let brut = '';
 process.stdin.on('data', d => { brut += d; });
 process.stdin.on('end', () => {
   let h; try { h = JSON.parse(brut); } catch { return bloquer('Garde : entrée illisible, action refusée.'); }
-  const role = h.agent_type || 'directeur';
+  // Rôle : celui du sous-agent ; sinon, pour un agent Copilot lancé par node siege/agent.js, SIEGE_ROLE (posé par l'outil,
+  // hors de portée de l'agent) ; sinon le directeur
+  const role = h.agent_type || process.env.SIEGE_ROLE || 'directeur';
   try {
     const ex = require('./lib/exceptions');
     if (h.hook_event_name === 'SubagentStop') {
@@ -50,11 +52,12 @@ process.stdin.on('end', () => {
       return process.exit(0);
     }
     const garde = require('./lib/garde');
-    let d = garde.decider(garde.charger(RACINE), { outil: h.tool_name, entree: h.tool_input || {} }, { racine: RACINE, role, exceptions: ex.actives(role) });
-    if (d.ok && h.tool_name === 'Agent') d = modeleAutorise(h) || mission(garde, h);
+    let d = garde.decider(garde.charger(RACINE), { outil: h.tool_name === 'Task' ? 'Agent' : h.tool_name, entree: h.tool_input || {} }, { racine: RACINE, role, exceptions: ex.actives(role) });
+    const n = garde.normaliser(h.tool_name === 'Task' ? 'Agent' : h.tool_name, h.tool_input || {}), hn = { ...h, tool_name: n.outil, tool_input: n.entree };
+    if (d.ok && hn.tool_name === 'Agent') d = modeleAutorise(hn) || mission(garde, hn);
     // Un agent d'un autre moteur (node siege/agent.js lancer) suit la même règle : une session = une étape d'un ticket
-    if (d.ok && h.tool_name === 'Bash') {
-      const c = String((h.tool_input || {}).command || '');
+    if (d.ok && hn.tool_name === 'Bash') {
+      const c = String((hn.tool_input || {}).command || '');
       if (/^\s*node siege\/agent\.js lancer\b/.test(c)) {
         const v = (k) => { const m = new RegExp('--' + k + '\\s+("([^"]*)"|\'([^\']*)\'|(\\S+))').exec(c); return m ? (m[2] ?? m[3] ?? m[4]) : ''; };
         d = mission(garde, { ...h, tool_input: { prompt: `Ticket : ${v('ticket')}\nÉtape : ${v('etape')}` } });

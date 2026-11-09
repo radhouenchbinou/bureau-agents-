@@ -12,7 +12,9 @@ const MODELE = /^[A-Za-z0-9][A-Za-z0-9._:\/-]{0,79}$/;
 class ErreurMoteur extends Error {}
 const refus = m => { throw new ErreurMoteur(m); };
 
-const sortie = (bin, args, ms = 15e3) => new Promise(ok => execFile(bin, args, { timeout: ms, maxBuffer: 8 << 20, env: process.env }, (e, out) => ok(e ? null : String(out))));
+// bin : nom d'exécutable, ou { cmd, avant } (Copilot sous Windows : node + script, sans cmd.exe)
+const sortie = (bin, args, ms = 15e3) => { const b = typeof bin === 'string' ? { cmd: bin, avant: [] } : bin;
+  return new Promise(ok => execFile(b.cmd, [...b.avant, ...args], { timeout: ms, maxBuffer: 8 << 20, env: process.env, windowsHide: true }, (e, out) => ok(e ? null : String(out)))); };
 
 // Catalogue Claude : Claude Code n'a pas de commande qui liste ses modèles ; alias acceptés par les agents (model: opus…)
 const CLAUDE = [
@@ -30,6 +32,15 @@ const MOTEURS = {
       const t = await sortie(bin, ['debug', 'models'], 30e3); let j; try { j = JSON.parse(t); } catch { return []; }
       return (j.models || []).filter(m => m.visibility === 'list' && MODELE.test(m.slug || '')).sort((a, b) => (a.priority || 99) - (b.priority || 99))
         .map(m => ({ id: m.slug, libelle: m.display_name || m.slug, source: 'détecté' }));
+    } },
+  // Copilot CLI : la liste des modèles vient de l'aide (« --model … (choices: …) ») si la version l'affiche, sinon le CEO
+  // ajoute ceux de son abonnement Copilot
+  copilot: { libelle: 'GitHub Copilot CLI', bin: () => require('./copilote').executable(), externe: true,
+    modeles: async bin => {
+      const t = (await sortie(bin, ['--help'])) || '', m = /--model[^\n]*?\(choices:\s*([^)]+)\)/s.exec(t);
+      const vus = m ? [...m[1].matchAll(/"([^"]+)"/g)].map(x => x[1]).filter(id => MODELE.test(id)) : [];
+      // « auto » (Copilot Fusion) existe toujours ; les autres modèles dépendent de l'abonnement : le CEO les ajoute
+      return [{ id: 'auto', libelle: 'Auto (Copilot Fusion)', source: 'catalogue' }, ...vus.filter(id => id !== 'auto').map(id => ({ id, libelle: id, source: 'détecté' }))];
     } },
   gemini: { libelle: 'Gemini CLI', bin: () => process.env.GEMINI_BIN || 'gemini', modeles: async () => [] }
 };
