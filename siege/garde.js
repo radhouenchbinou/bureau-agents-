@@ -15,6 +15,14 @@ function journal(ligne) {
   } catch {}
 }
 // Liaison session du directeur → (ticket, étape), gardée 7 jours dans ~/.siege/sessions-etapes.json
+// Modèle d'un sous-agent Claude Code (paramètre de l'appel, sinon celui de sa définition) : activé par le CEO ?
+function modeleAutorise(h) {
+  const moteurs = require('./lib/moteurs'), e = h.tool_input || {};
+  let m = e.model || '';
+  if (!m && e.subagent_type) { try { m = (/^model:\s*(\S+)/m.exec(fs.readFileSync(path.join(RACINE, '.claude', 'agents', e.subagent_type + '.md'), 'utf8').split(/^---$/m)[1] || '') || [])[1] || ''; } catch {} }
+  const r = moteurs.autorise('claude', m);
+  return r.ok ? null : { ok: false, raison: r.raison + ' : choisis un autre modèle (paramètre model) ou demande au CEO de le réactiver' };
+}
 function mission(garde, h) {
   const d = process.env.SIEGE_PRIVE || path.join(os.homedir(), '.siege'), f = path.join(d, 'sessions-etapes.json');
   let l = {}; try { l = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
@@ -43,7 +51,15 @@ process.stdin.on('end', () => {
     }
     const garde = require('./lib/garde');
     let d = garde.decider(garde.charger(RACINE), { outil: h.tool_name, entree: h.tool_input || {} }, { racine: RACINE, role, exceptions: ex.actives(role) });
-    if (d.ok && h.tool_name === 'Agent') d = mission(garde, h);
+    if (d.ok && h.tool_name === 'Agent') d = modeleAutorise(h) || mission(garde, h);
+    // Un agent d'un autre moteur (node siege/agent.js lancer) suit la même règle : une session = une étape d'un ticket
+    if (d.ok && h.tool_name === 'Bash') {
+      const c = String((h.tool_input || {}).command || '');
+      if (/^\s*node siege\/agent\.js lancer\b/.test(c)) {
+        const v = (k) => { const m = new RegExp('--' + k + '\\s+("([^"]*)"|\'([^\']*)\'|(\\S+))').exec(c); return m ? (m[2] ?? m[3] ?? m[4]) : ''; };
+        d = mission(garde, { ...h, tool_input: { prompt: `Ticket : ${v('ticket')}\nÉtape : ${v('etape')}` } });
+      }
+    }
     if (d.ok) { if (d.exception) { ex.noterUsage(d.exception); journal({ evenement: 'exception_utilisee', role, outil: h.tool_name, exception: d.exception }); } return process.exit(0); }
     journal({ evenement: 'refus', role, outil: h.tool_name, raison: d.raison, type: d.type || '', motif: d.motif || '' });
     bloquer(`Refusé par la garde du Siège — ${d.raison}.` + (d.type

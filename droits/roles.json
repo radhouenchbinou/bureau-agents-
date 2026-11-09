@@ -71,7 +71,8 @@
         "^node siege/exception\\.js (demander|activer|terminer)\\b",
         "^node siege/github\\.js etat\\b",
         "^node siege/demande\\.js (liste|voir|repondre|valider|escalader|ticket|refuser|clore|notifier)\\b",
-        "^node siege/filiale\\.js (liste|ajouter)\\b"
+        "^node siege/filiale\\.js (liste|ajouter)\\b",
+        "^node siege/agent\\.js (moteurs|lancer)\\b"
       ],
       "web": [],
       "github": {},

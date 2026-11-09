@@ -47,7 +47,8 @@
       "node siege/github.js *",
       "node siege/exception.js *",
       "node siege/demande.js *",
-      "node siege/filiale.js *"
+      "node siege/filiale.js *",
+      "node siege/agent.js *"
     ],
     "network": {
       "allowedDomains": [

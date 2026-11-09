@@ -14,6 +14,7 @@ const { questionsOuvertes } = require('./backlog');
 const exceptions = require('./lib/exceptions'), parametres = require('./lib/parametres'), skills = require('./lib/skills'), droits = require('./droits');
 const fs = require('fs'), os = require('os');
 const jira = require('./lib/jira'), integrations = require('./lib/integrations'), gh = require('./lib/github');
+const moteurs = require('./lib/moteurs');
 const tg = require('./lib/telegram'), sl = require('./lib/slack'), demandes = require('./lib/demandes'), canaux = require('./lib/canaux'), { Messagerie, commun, communModifier } = require('./lib/messagerie');
 
 // Telegram : sujets dont le CEO est prévenu une fois chacun (questions d'agents, exceptions à décider)
@@ -80,7 +81,10 @@ async function etat() {
     demandes: demandes.lire().liste.slice(-200).reverse(),
     integrations: integrations.vue({ racine: cfg.F.racine, prive: cfg.F.prive, source: s, jetonNotion: cfg.jeton(), jetonJira: cfg.jetonJira(), filiales: fil }),
     schemas: Object.fromEntries(Object.entries(COLLECTIONS).map(([n, c]) => [n, { libelle: c.libelle, champs: c.champs }])), etapes: ETAPES,
-    filiales: fil, agents: ag, rolesFiliale: ROLES_FILIALE, modeles: MODELES, outils: OUTILS,
+    filiales: fil, agents: ag, rolesFiliale: ROLES_FILIALE, outils: OUTILS,
+    // Modèles des sous-agents Claude Code, avec ce que le CEO a désactivé ; moteurs d'agents détectés sur la machine
+    modeles: MODELES.map(m => ({ id: m, actif: !m || m === 'inherit' || moteurs.autorise('claude', m).ok })),
+    moteurs: await moteurs.detecter(),
     features: f, bugs: b, file: file(f.elements, b.elements), activite: act, questions: await questionsEnAttente(),
     droits: (() => { try { return vueDroits(); } catch (e) { return { erreur: e.message, roles: [], exceptions: [], journal: [], autorisations: { liste: [] }, skills: [] }; } })()
   };
@@ -213,6 +217,12 @@ async function action(op) {
       if (op.oui) messagerie.demarrer(); else messagerie.arreterSlack();
       return { ok: true };
     }
+    // Moteurs d'agents (Claude Code, Codex…) et modèles : activés ou non par le CEO
+    case 'moteurs.detecter': return moteurs.detecter({ forcer: true });
+    case 'moteur.activer': moteurs.activerMoteur(op.nom, op.oui); return { ok: true };
+    case 'modele.activer': moteurs.activerModele(op.moteur, op.id, op.oui); return { ok: true };
+    case 'modele.ajouter': moteurs.ajouterModele(op.moteur, op.id); return { ok: true };
+    case 'modele.retirer': moteurs.retirerModele(op.moteur, op.id); return { ok: true };
     case 'demande.relancer': { const x = demandes.lire().liste.find(y => y.id === op.id); if (!x || !demandes.ouverte(x)) refus('Demande close ou introuvable'); messagerie.planifier(x.id); return { ok: true }; }
     case 'backlog.importer':
     case 'notion.importer': {
@@ -273,7 +283,7 @@ const serveur = http.createServer(async (req, res) => {
       if (!egal(req.headers['x-siege-csrf'], CSRF) || !/^application\/json/.test(req.headers['content-type'] || '')) return envoyer(403, { erreur: 'Jeton de page manquant : rechargez la page' });
       let op; try { op = JSON.parse(await corps(req)); } catch { return envoyer(400, { erreur: 'Requête illisible' }); }
       try { return envoyer(200, { ok: true, resultat: (await action(op)) || null }); }
-      catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException || e instanceof integrations.ErreurIntegration || e instanceof gh.ErreurGithub || e instanceof tg.ErreurTelegram || e instanceof sl.ErreurSlack || e instanceof demandes.ErreurDemande) return envoyer(400, { erreur: e.message }); throw e; }
+      catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException || e instanceof integrations.ErreurIntegration || e instanceof gh.ErreurGithub || e instanceof tg.ErreurTelegram || e instanceof sl.ErreurSlack || e instanceof demandes.ErreurDemande || e instanceof moteurs.ErreurMoteur) return envoyer(400, { erreur: e.message }); throw e; }
     }
     if (req.method !== 'GET') return envoyer(405, { erreur: 'Méthode refusée' });
     const rel = u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname).replace(/^\/+/, '');

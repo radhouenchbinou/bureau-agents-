@@ -5,7 +5,7 @@ const fsp = require('fs').promises, path = require('path');
 const { ErreurBacklog } = require('./backlog');
 
 const NOM = /^[a-z][a-z0-9-]{1,40}$/;
-const MODELES = ['', 'inherit', 'haiku', 'sonnet', 'opus'];
+const MODELES = ['', 'inherit', 'haiku', 'sonnet', 'opus', ...require('./moteurs').CLAUDE.map(m => m.id)];
 const OUTILS = ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'Bash', 'WebFetch', 'WebSearch', 'Skill', 'TodoWrite', 'ToolSearch', 'BashOutput'];
 const SKILL = /^[a-z0-9][a-z0-9-]{1,63}$/;
 // Rôles de filiale : un exemplaire par filiale ; les autres sont des services partagés

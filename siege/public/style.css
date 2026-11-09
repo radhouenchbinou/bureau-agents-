@@ -146,3 +146,9 @@ label.champ.coche{display:flex;align-items:center;gap:8px;grid-column:1/-1}
 .carte h4{margin:14px 0 6px;font-size:13px}
 .carte ul{margin:0;padding-left:18px;display:grid;gap:6px}
 .carte details textarea{width:100%;box-sizing:border-box;font-size:12px;margin:6px 0}
+/* Moteurs d'agents */
+.moteurs{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:8px}
+.moteur{border:1px solid var(--line);border-radius:10px;padding:12px}
+.moteur.eteint{opacity:.75}
+.moteur ul.modeles{list-style:none;padding:0;display:grid;gap:4px;margin:6px 0}
+.moteur ul.modeles li{display:flex;justify-content:space-between;align-items:center;gap:8px}

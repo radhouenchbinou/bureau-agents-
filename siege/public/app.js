@@ -231,8 +231,29 @@
   }
 
   // ---------- Agents ----------
+  // Moteurs d'agents présents sur la machine et leurs modèles, activés ou non par le CEO
+  function carteMoteurs() {
+    const ajout = {};
+    return h('div', { class: 'carte' }, h('div', { class: 'barre' }, h('h3', { text: 'Moteurs d\'agents et modèles' }),
+        btn2('Détecter à nouveau', () => act({ op: 'moteurs.detecter' }, 'Moteurs détectés'))),
+      h('p', { class: 'aide', text: 'Ce qui est installé sur cette machine. Claude Code fait tourner le directeur et ses sous-agents ; un autre moteur (Codex) reçoit du directeur une tâche précise d\'un ticket (node siege/agent.js), dans le repo de la filiale, sans réseau. Un moteur ou un modèle désactivé est refusé par la garde et par l\'outil.' }),
+      h('div', { class: 'moteurs' }, E.moteurs.map(m => h('div', { class: 'moteur' + (m.actif ? '' : ' eteint') },
+        h('div', { class: 'barre' }, h('b', { text: m.libelle }), ' ',
+          m.installe ? h('span', { class: 'muted mono', text: m.version }) : h('span', { class: 'tag attente', text: 'non installé' }),
+          m.installe && m.nom !== 'claude' ? btn2(m.demande ? 'Désactiver' : 'Activer', () => act({ op: 'moteur.activer', nom: m.nom, oui: !m.demande }, m.demande ? m.libelle + ' désactivé' : m.libelle + ' activé'), false, m.demande ? '' : 'prim')
+            : m.nom === 'claude' ? h('span', { class: 'tag ok', text: 'toujours actif (directeur)' }) : null),
+        h('p', { class: 'aide', text: m.sousAgents ? 'Sous-agents du directeur (modèle choisi par agent).' : m.externe ? 'Agents lancés par le directeur pour une tâche précise.' : 'Détecté seulement : pas encore utilisable par le Siège.' }),
+        m.modeles.length ? h('ul', { class: 'modeles' }, m.modeles.map(x => h('li', {},
+          h('label', { class: 'coche' }, h('input', { type: 'checkbox', checked: x.actif, disabled: !m.installe, onchange: ev => act({ op: 'modele.activer', moteur: m.nom, id: x.id, oui: ev.target.checked }, x.id + (ev.target.checked ? ' activé' : ' désactivé')).catch(() => {}) }),
+            ' ', h('span', { text: x.libelle }), ' ', h('span', { class: 'muted mono', text: x.id + (x.source === 'ajouté' ? ' · ajouté' : '') })),
+          x.source === 'ajouté' ? h('button', { type: 'button', class: 'btn petit', text: 'Retirer', onclick: () => act({ op: 'modele.retirer', moteur: m.nom, id: x.id }, 'Retiré').catch(() => {}) }) : null)))
+          : h('p', { class: 'aide', text: m.installe ? 'Aucun modèle détecté : ajoutez ceux que vous voulez autoriser.' : '' }),
+        m.installe ? h('div', { class: 'barre' }, ajout[m.nom] = h('input', { placeholder: 'identifiant de modèle', 'aria-label': 'Ajouter un modèle à ' + m.libelle }),
+          btn2('Ajouter', () => act({ op: 'modele.ajouter', moteur: m.nom, id: ajout[m.nom].value }, 'Modèle ajouté'))) : null))));
+  }
+
   function rendreAgents() {
-    vider($('#v-agents'),
+    vider($('#v-agents'), carteMoteurs(),
       h('div', { class: 'barre' }, h('p', { class: 'aide', text: 'Chaque agent est un fichier .claude/agents/<nom>.md lu par Claude Code. Les rôles de filiale servent toutes les filiales.' }),
         h('button', { type: 'button', class: 'btn prim', text: 'Nouvel agent', onclick: () => editeurAgent(null) })),
       ['filiale', 'groupe'].map(p => [h('h2', { text: p === 'filiale' ? 'Équipe de filiale' : 'Services partagés' }),
@@ -250,7 +271,7 @@
     } },
       h('label', { class: 'champ' }, h('span', {}, h('b', { text: 'Nom' }), ' (minuscules et tirets)'), h('input', { name: 'nom', value: v.nom, readonly: !nouveau, required: true, pattern: '[a-z][a-z0-9-]{1,40}' })),
       h('label', { class: 'champ' }, h('span', {}, h('b', { text: 'Description' }), ' — quand le directeur doit faire appel à lui'), h('textarea', { name: 'description', text: v.description, required: true })),
-      h('label', { class: 'champ' }, h('span', {}, h('b', { text: 'Modèle' })), h('select', { name: 'modele' }, E.modeles.map(m => h('option', { value: m, text: m || '(par défaut)', selected: m === v.modele })))),
+      h('label', { class: 'champ' }, h('span', {}, h('b', { text: 'Modèle' })), h('select', { name: 'modele' }, E.modeles.filter(m => m.actif || m.id === v.modele).map(m => h('option', { value: m.id, text: (m.id || '(par défaut)') + (m.actif ? '' : ' — désactivé'), selected: m.id === v.modele })))),
       h('div', { class: 'champ' }, h('span', {}, h('b', { text: 'Droits et skills' })),
         nouveau ? h('p', { class: 'aide', text: 'Un nouvel agent démarre en lecture seule. Ses droits (outils, dossiers, commandes, GitHub) se définissent dans droits/roles.json, ses skills dans l\'onglet Droits.' })
           : h('div', { class: 'meta' }, v.outils.map(o => h('span', { class: 'tag', text: o })), (v.skills || []).map(s => h('span', { class: 'tag question', text: s })))),

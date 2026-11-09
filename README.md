@@ -201,6 +201,22 @@ réglable) au-delà duquel les demandes attendent et vous êtes prévenu ; une s
 Demandes et annuaires dans `~/.siege/demandes.json`, `telegram.json` et `slack.json` (600), jamais dans le dépôt. Journal des
 sessions : `~/.siege/directeur-demandes.log`.
 
+## Moteurs d'agents : Claude Code, Codex…
+
+**Siège › Agents › Moteurs d'agents et modèles** liste les moteurs installés sur la machine (Claude Code, Codex,
+Gemini CLI) avec leurs modèles : catalogue connu pour Claude Code, `codex debug models` pour Codex, et ceux que vous
+ajoutez. Vous activez ou désactivez chaque moteur et chaque modèle (`droits/moteurs.json`, hors de portée des agents).
+
+- **Claude Code** fait tourner le directeur et ses sous-agents ; un sous-agent dont le modèle est désactivé (dans sa
+  définition ou à l'appel) est refusé par la garde.
+- **Codex** (s'il est installé et activé) reçoit du directeur une tâche précise d'un ticket :
+  `node siege/agent.js lancer --moteur codex --modele <id> --role dev-backend --filiale <Nom> --ticket <ID>
+  --etape "<n> · <nom>" --mission "…" [--pousser feature/<ID>]`. Rôles de filiale seulement (PO, devs, QA,
+  rédacteur). Codex tourne dans son propre bac à sable : écriture dans le repo de la filiale seulement, **réseau
+  coupé**, session éphémère, configuration utilisateur ignorée. Il n'a ni jeton GitHub ni accès au backlog : l'outil
+  inscrit sa passation sur le ticket et, avec `--pousser`, pousse la branche avec le jeton du rôle. Même règle
+  « une session du directeur = une étape » que pour les sous-agents. Journal : `~/.siege/agents-externes.log`.
+
 ## Brancher GitHub depuis le Siège
 
 **Siège › Intégrations › GitHub** : App ID, Installation ID, clé privée (`.pem`, déposée ou collée, gardée dans
