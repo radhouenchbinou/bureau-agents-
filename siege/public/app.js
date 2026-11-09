@@ -114,7 +114,17 @@
       h('div', { class: 'barre' }, h('button', { type: 'button', class: 'btn', text: 'Modifier l\'agent', onclick: () => editeurAgent(a) })),
       h('h3', { text: 'Missions récentes' }),
       missions.length ? h('div', { class: 'journal' }, missions.slice(0, 20).map(m => h('div', {}, h('span', { class: 'muted', text: depuis(m.derniere) }), h('span', { class: 'mono', text: m.story || '—' }), h('span', {}, h('span', { class: 'pastille ' + ETAT[m.etat][0] }, h('i'), ETAT[m.etat][1])), h('span', { text: m.resume }))))
-        : h('p', { class: 'aide', text: 'Aucune mission sur les 7 derniers jours.' }));
+        : h('p', { class: 'aide', text: 'Aucune mission sur les 7 derniers jours.' }),
+      JournalAgent.section(a.nom, {
+        h, vider,
+        lire: async (depuis, nombre) => {
+          const r = await fetch('/api/agents/' + encodeURIComponent(a.nom) + '/journal?depuis=' + depuis + '&nombre=' + nombre, { cache: 'no-store' });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        },
+        ticketConnu: id => [...E.features.elements, ...E.bugs.elements].some(t => t.id === id),
+        ouvrirTicket: id => { coll = id.startsWith('BUG-') ? 'bugs' : 'features'; ficheTicket(E[coll].elements.find(t => t.id === id)); }
+      }));
   }
 
   // ---------- Backlog ----------

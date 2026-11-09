@@ -152,3 +152,17 @@ label.champ.coche{display:flex;align-items:center;gap:8px;grid-column:1/-1}
 .moteur.eteint{opacity:.75}
 .moteur ul.modeles{list-style:none;padding:0;display:grid;gap:4px;margin:6px 0}
 .moteur ul.modeles li{display:flex;justify-content:space-between;align-items:center;gap:8px}
+
+/* Journal d'un agent (EIA-017) */
+.jr{display:grid;gap:8px;margin-top:14px}
+.jr h3{margin:0}
+.jr-liste{display:grid;gap:6px}
+.jr-entree{padding:8px 10px;border-radius:8px;background:var(--panel);border:1px solid var(--line);font-size:12.5px}
+.jr-tete{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.jr-detail{margin:6px 0 0}
+.jr-detail summary{cursor:pointer;min-height:28px;display:flex;align-items:center;font-size:12.5px}
+.jr-detail summary:focus-visible,.jr-extrait:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.jr-evs{margin:6px 0;padding-left:18px;display:grid;gap:4px}
+.jr-extrait{margin:6px 0 0;padding:8px;border-radius:6px;background:var(--sunk);white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto}
+.jr .btn{min-height:40px}
+@media (max-width:640px){.jr-tete{display:grid;grid-template-columns:minmax(0,1fr);gap:4px}}
