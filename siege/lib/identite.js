@@ -64,15 +64,22 @@ function deposer(role, mots, { env, maintenant = Date.now() } = {}) {
     const d = dossier(env); fs.mkdirSync(d, { recursive: true, mode: 0o700 });
     purger(d, maintenant);
     const f = path.join(d, cleIdentite(mots) + '.json');
-    for (let essai = 0; essai < 2; essai++) {
-      try { fs.writeFileSync(f, JSON.stringify({ role, expire: maintenant + DUREE_MS }), { flag: 'wx', mode: 0o600 }); return null; }
-      catch (e) {
-        if (e.code !== 'EEXIST') throw e;
-        let x = null; try { x = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
-        if (x && Number.isInteger(x.expire) && x.expire >= maintenant) return x.role === role ? null : 'commande identique en cours pour un autre rôle, réessaie';
-        try { fs.unlinkSync(f); } catch {}
+    // Le fichier final n'apparaît jamais à moitié écrit : écriture dans un temporaire, puis linkSync (création atomique, EEXIST si présent)
+    const tmp = f + '.' + process.pid + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify({ role, expire: maintenant + DUREE_MS }), { flag: 'wx', mode: 0o600 });
+    try {
+      for (let essai = 0; essai < 2; essai++) {
+        try { fs.linkSync(tmp, f); return null; }
+        catch (e) {
+          if (e.code !== 'EEXIST') throw e;
+          let x = null; try { x = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+          if (x && Number.isInteger(x.expire)) {
+            if (x.expire >= maintenant) return x.role === role ? null : 'commande identique en cours pour un autre rôle, réessaie';
+          } else if (maintenant - fs.statSync(f).mtimeMs <= DUREE_MS) return 'entrée illisible en cours pour cette commande, réessaie';   // jamais remplacée tant qu'elle est récente
+          try { fs.unlinkSync(f); } catch {}
+        }
       }
-    }
+    } finally { try { fs.unlinkSync(tmp); } catch {} }
     throw new Error('registre');
   } catch { return 'identité : dépôt impossible dans ' + path.join('~', '.siege', 'identites'); }
 }

@@ -149,18 +149,38 @@ test('CA10 garde : dépôt d\'une entrée par rôle, collision de clé, expirati
   assert.strictEqual(fs.readdirSync(path.join(PRIVE, 'identites')).length, 1, 'seules les entrées expirées sont purgées');
 });
 
-test('CA10 la garde et l\'outil calculent la même clé (guillemets, antislash, accents, espaces)', () => {
-  const cas = ['node siege/backlog.js commenter EIA-001 --texte "l\'agent dit \\"ok\\" é à ü"', 'node siege/backlog.js commenter EIA-001 --texte "chemin C:\\dossier\\x"',
-    'node siege/backlog.js commenter   EIA-001   --texte   x', 'FOO=1 node siege/backlog.js commenter EIA-001 --texte x', 'node siege/backlog.js file && node siege/backlog.js questions'];
-  for (const c of cas) {
-    const segs = garde.outilsSiege(c); assert.ok(segs.length >= 1, c);
-    for (const mots of segs) assert.strictEqual(typeof identite.cleIdentite(mots), 'string');
+test('CA10 dépôt : une entrée vide et récente (écriture en cours d\'un autre) n\'est jamais remplacée ; aucun temporaire ne reste', () => {
+  vider(); const mots = ['siege/backlog.js', 'commenter', 'EIA-001', '--texte', 'course'], d = path.join(PRIVE, 'identites');
+  fs.mkdirSync(d, { recursive: true }); const f = path.join(d, identite.cleIdentite(mots) + '.json'); fs.writeFileSync(f, '');
+  assert.match(identite.deposer('dev-backend', mots), /illisible en cours.*réessaie/);
+  assert.strictEqual(fs.readFileSync(f, 'utf8'), '', 'entrée intacte');
+  assert.deepStrictEqual(fs.readdirSync(d), [path.basename(f)], 'pas de temporaire laissé');
+  const vieux = new Date(Date.now() - identite.DUREE_MS * 2); fs.utimesSync(f, vieux, vieux);
+  assert.strictEqual(identite.deposer('dev-backend', mots), null, 'entrée illisible ancienne : remplacée');
+  assert.strictEqual(JSON.parse(fs.readFileSync(f, 'utf8')).role, 'dev-backend');
+  assert.deepStrictEqual(fs.readdirSync(d), [path.basename(f)]);
+});
+
+test('CA10 la garde et l\'outil calculent la même clé que l\'argv réel de bash -c (guillemets, antislash, accents, espaces)', () => {
+  const { spawnSync } = require('child_process'), argv = c => { const r = spawnSync('bash', ['-c', c.replace(/^node siege\/backlog\.js/, `node -e 'console.log(JSON.stringify(process.argv.slice(1)))' siege/backlog.js`)], { encoding: 'utf8' }); return JSON.parse(r.stdout); };
+  const litteraux = ['node siege/backlog.js commenter EIA-001 --texte "l\'agent dit \\"ok\\" é à ü"', 'node siege/backlog.js commenter EIA-001 --texte "chemin C:\\dossier\\x"',
+    'node siege/backlog.js commenter   EIA-001   --texte   x', 'node siege/backlog.js commenter EIA-001 --texte \'a\\b\'', 'node siege/backlog.js commenter EIA-001 --texte a\\ b',
+    'node siege/backlog.js commenter EIA-001 --texte "ligne1\nligne2"', 'node siege/backlog.js commenter EIA-001 --texte "日本 ü"'];
+  for (const c of litteraux) {
+    const segs = garde.outilsSiege(c); assert.strictEqual(segs.length, 1, c);
+    assert.strictEqual(identite.cleIdentite(segs[0]), identite.cleIdentite(argv(c)), c);
   }
-  assert.strictEqual(garde.outilsSiege(cas[4]).length, 2, 'une entrée par segment');
+  // expansions du shell : la garde ne les évalue pas, la clé diffère de l'argv réel donc l'outil refuse (échec fermé)
+  for (const c of ['node siege/backlog.js commenter EIA-001 --texte *', 'node siege/backlog.js commenter EIA-001 --texte {a,b}', 'node siege/backlog.js commenter EIA-001 --texte $HOME']) {
+    const segs = garde.outilsSiege(c); if (!segs.length) continue;      // refusée d'emblée par la garde : fermé aussi
+    assert.notStrictEqual(identite.cleIdentite(segs[0]), identite.cleIdentite(argv(c)), c);
+  }
+  const multi = 'node siege/backlog.js file && node siege/backlog.js questions';
+  assert.strictEqual(garde.outilsSiege(multi).length, 2, 'une entrée par segment');
+  assert.strictEqual(identite.cleIdentite(garde.outilsSiege('FOO=1 node siege/backlog.js commenter EIA-001 --texte x')[0]), identite.cleIdentite(['siege/backlog.js', 'commenter', 'EIA-001', '--texte', 'x']));
   assert.deepStrictEqual(garde.outilsSiege('ls && node autre.js x'), []);
   assert.deepStrictEqual(garde.outilsSiege('node siege/inconnu.js x'), []);
   assert.deepStrictEqual(garde.outilsSiege('echo $(id)'), []);
-  assert.strictEqual(identite.cleIdentite(garde.outilsSiege(cas[2])[0]), identite.cleIdentite(['siege/backlog.js', 'commenter', 'EIA-001', '--texte', 'x']));
 });
 
 test('CA3/CA4 la garde refuse aussi (défense en profondeur) : auteur réservé, autre rôle, option répétée', () => {
@@ -175,6 +195,9 @@ test('CA3/CA4 la garde refuse aussi (défense en profondeur) : auteur réservé,
   assert.ok(!d('qa', 'SIEGE_ROLE=CEO node siege/backlog.js file').ok, 'marqueur forgé');
   assert.ok(!d('qa', 'CLAUDECODE= node siege/backlog.js file').ok, 'marqueur vidé');
   assert.ok(!d('directeur', 'env SIEGE_PRIVE=/tmp/x node siege/backlog.js file').ok);
+  for (const c of ['SIEGE_PRIVE=/tmp/x node siege/backlog.js file', 'SIEGE_RACINE=/tmp/x node siege/backlog.js file', 'FOO=1 CLAUDE_X=1 node siege/backlog.js file', 'SIEGE_CONTEXTE= node siege/backlog.js file']) {
+    const r = d('qa', c); assert.ok(!r.ok, c); assert.match(r.raison, /Variable d'environnement interdite/, c);
+  }
 });
 
 test('R4 noms réservés : liste de roles.json, CEO par défaut, rôle d\'agent nommé comme un humain refusé', () => {
