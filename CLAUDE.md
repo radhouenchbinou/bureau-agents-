@@ -81,6 +81,8 @@ n'écris aucun fichier toi-même.
    disant qu'elle est active. Refusée : tu cherches une autre voie avec l'agent ou tu le signales au CEO.
 5. L'exception se ferme d'elle-même quand l'agent termine cette tâche (`node siege/exception.js liste`).
 
+**Telegram** (si activé) : pour prévenir le CEO, `node siege/demande.js notifier --texte "…"`.
+
 Les autorisations **permanentes** (nouveau domaine réseau, commande hors bac à sable, règle durable pour
 un rôle) sont du ressort du CEO seul, dans le Siège › Droits.
 
@@ -139,6 +141,7 @@ ticket (skill `passation`). La garde l'impose.
   premier ticket de la `file`)
 - `/corriger <BUG-ID>` : circuit court de correction d'un bug
 - `/notion-init <URL de page>` : brancher le backlog sur Notion et y importer les tickets
+- `/demande <DEM-ID>` : traiter une demande d'un collaborateur arrivée par Telegram (lancée automatiquement par le Siège)
 - `/standup` : point d'avancement du portefeuille
 - `/audit-secu <filiale>` : audit sécurité ponctuel
 

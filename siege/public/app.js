@@ -47,7 +47,7 @@
       h('span', {}, 'Backlog : ', h('b', { text: ({ notion: 'Notion', jira: 'Jira' })[E.source.type] || 'fichiers locaux' })));
     const errs = [E.features.erreur, E.bugs.erreur, E.questions.erreur, E.activite.erreur].filter(Boolean);
     bandeau(errs.length ? [...new Set(errs)].join(' · ') : '', true);
-    ({ bureau: rendreBureau, backlog: rendreBacklog, agents: rendreAgents, droits: rendreDroits, reglages: rendreReglages })[vue]();
+    ({ bureau: rendreBureau, backlog: rendreBacklog, agents: rendreAgents, demandes: rendreDemandes, droits: rendreDroits, reglages: rendreReglages })[vue]();
   }
   document.querySelectorAll('.tabs button').forEach(bt => bt.addEventListener('click', () => {
     vue = bt.dataset.v; document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', x === bt));
@@ -342,7 +342,25 @@
   }
 
   // ---------- Réglages : intégrations du CEO (backlog Fichiers / Notion / Jira, App GitHub) ----------
-  const retoursInteg = { jira: null, github: null };   // résultats d'initialisation / de test, gardés d'un rendu à l'autre
+  const retoursInteg = { jira: null, github: null };
+  const btn2 = (text, f, disabled, cls) => h('button', { type: 'button', class: 'btn' + (cls ? ' ' + cls : ''), text, disabled: !!disabled, onclick: () => f().catch(() => {}) });
+
+  // ---------- Demandes des collaborateurs (Telegram) ----------
+  function rendreDemandes() {
+    const T = E.telegram, L = E.demandes, ouv = L.filter(x => !['Acceptée', 'Refusée', 'Close'].includes(x.statut));
+    const fil = x => h('div', { class: 'fil' }, x.messages.map(m => h('p', { class: 'msg ' + (m.de === 'collaborateur' ? 'lui' : m.de === 'CEO' ? 'ceo' : 'dir') },
+      h('b', { text: m.de === 'collaborateur' ? x.auteur.nom : m.de === 'CEO' ? 'CEO' : 'Directeur' }), ' ', h('span', { class: 'muted', text: new Date(m.date).toLocaleString('fr-FR') }), h('br'), m.texte)));
+    vider($('#v-demandes'),
+      h('div', { class: 'carte' }, h('h3', { text: 'Demandes des collaborateurs' }),
+        h('p', { class: 'aide', text: T.actif ? `Telegram actif · ${ouv.length} ouverte(s) · ${T.sessionsAujourdhui}/${T.plafondJour} sessions du directeur aujourd'hui` + (T.enCours ? ' · le directeur traite ' + T.enCours : '') + (T.file.length ? ' · en file : ' + T.file.join(', ') : '')
+          : 'Telegram n\'est pas actif (Intégrations › Telegram) : aucune demande n\'arrive.' })),
+      L.length ? L.map(x => h('details', { class: 'carte demande', open: ['Chez le CEO', 'À valider', 'Nouvelle'].includes(x.statut) },
+        h('summary', {}, h('b', { text: x.id }), ' ', h('span', { class: 'tag' + (x.statut === 'Chez le CEO' ? ' question' : ['Acceptée'].includes(x.statut) ? ' ok' : ''), text: x.statut }), ' ', x.auteur.nom,
+          x.type ? ' · ' + x.type : '', x.ticket ? ' → ' + x.ticket : '', ' — ', h('span', { class: 'muted', text: (x.resume || (x.messages[0] || {}).texte || '').slice(0, 90) })),
+        fil(x),
+        !['Acceptée', 'Refusée', 'Close'].includes(x.statut) ? h('div', { class: 'barre' }, btn2('Relancer le directeur', () => act({ op: 'demande.relancer', id: x.id }, 'Relancé'))) : null))
+        : h('p', { class: 'aide', text: 'Aucune demande pour l\'instant.' }));
+  }   // résultats d'initialisation / de test, gardés d'un rendu à l'autre
   function rendreReglages() {
     const vue = $('#v-reglages'); delete vue.dataset.modifie;
     vue.oninput = () => { vue.dataset.modifie = '1'; };
@@ -424,7 +442,29 @@
       h('p', { text: 'App « ' + r.app + ' » : ' + r.accessibles.length + ' repo(s) accessible(s).' }),
       r.manquants.length ? h('p', { class: 'attention', text: 'Repos déclarés mais non accessibles à l\'App (installez-la dessus) : ' + r.manquants.join(', ') }) : h('p', { text: 'Tous les repos déclarés sont accessibles.' })); }
 
-    vider($('#v-reglages'), sources, jiraC, notion, github,
+    // Telegram
+    const T = E.telegram, jT = mot('123456789:AA…', 'Jeton du bot Telegram'), plaf = h('input', { type: 'number', min: 1, max: 1000, value: T.plafondJour, 'aria-label': 'Plafond', style: 'width:90px' });
+    const pers = (p, boutons) => h('li', {}, h('b', { text: p.nom }), p.username ? ' @' + p.username : '', ' ', h('span', { class: 'muted mono', text: '#' + p.id }), ' ', boutons);
+    const btn = (t, op, msg, cls) => h('button', { type: 'button', class: 'btn petit' + (cls ? ' ' + cls : ''), text: t, onclick: () => act(op, msg).catch(() => {}) });
+    const telegram = h('div', { class: 'carte' }, h('h3', {}, 'Telegram ', etat(T.actif, 'actif', T.jeton ? 'inactif' : 'non branché')),
+      h('p', { class: 'aide', text: 'Option : les collaborateurs écrivent au directeur sur Telegram (bug, évolution) ; chaque message lance automatiquement une courte session du directeur, qui leur répond, leur fait valider un résumé, crée le ticket, et vous transmet ce qui doit l\'être. Il vous prévient aussi sur Telegram des questions d\'agents et des exceptions à décider (que vous tranchez toujours ici). Les collaborateurs n\'ont jamais accès au Siège.' }),
+      h('ol', { class: 'aide' },
+        h('li', {}, 'Créez un bot avec ', h('a', { href: 'https://t.me/BotFather', target: '_blank', rel: 'noopener', text: '@BotFather' }), ' (/newbot) et collez son jeton.'),
+        h('li', { text: 'Activez, puis envoyez /start au bot depuis votre compte : vous apparaissez ci-dessous, désignez-vous comme CEO.' }),
+        h('li', { text: 'Chaque collaborateur envoie /start au bot : autorisez-le ici. Un inconnu n\'obtient jamais de réponse du directeur.' })),
+      h('div', { class: 'barre' }, jT, btn2(T.jeton ? 'Remplacer le jeton' : 'Enregistrer le jeton', () => act({ op: 'telegram.jeton', jeton: jT.value }, 'Jeton du bot enregistré').then(() => { jT.value = ''; })),
+        btn2('Tester', () => act({ op: 'telegram.tester' }).then(r => toast('Bot @' + r.bot + ' joignable')), !T.jeton),
+        btn2(T.actif ? 'Désactiver' : 'Activer', () => act({ op: 'telegram.activer', oui: !T.actif }, T.actif ? 'Telegram désactivé' : 'Telegram activé'), !T.jeton, T.actif ? '' : 'prim')),
+      T.bot ? h('p', { class: 'aide' }, 'Bot : ', h('a', { href: 'https://t.me/' + T.bot, target: '_blank', rel: 'noopener', text: '@' + T.bot })) : null,
+      h('h4', { text: 'CEO' }), T.ceo ? h('ul', {}, pers(T.ceo, btn('Retirer', { op: 'telegram.retirer', id: T.ceo.id }, 'Retiré'))) : h('p', { class: 'aide', text: 'Pas encore désigné.' }),
+      h('h4', { text: 'Demandes d\'accès (' + T.enAttente.length + ')' }),
+      T.enAttente.length ? h('ul', {}, T.enAttente.map(a => pers(a, h('span', {}, btn('Autoriser', { op: 'telegram.autoriser', id: a.id }, 'Accès ouvert', 'prim'), ' ', btn('C\'est moi, le CEO', { op: 'telegram.ceo', id: a.id }, 'CEO enregistré'), ' ', btn('Refuser', { op: 'telegram.retirer', id: a.id }, 'Refusé'))))) : h('p', { class: 'aide', text: 'Aucune.' }),
+      h('h4', { text: 'Collaborateurs autorisés (' + T.collaborateurs.length + ')' }),
+      T.collaborateurs.length ? h('ul', {}, T.collaborateurs.map(c => pers(c, btn('Retirer', { op: 'telegram.retirer', id: c.id }, 'Accès retiré')))) : h('p', { class: 'aide', text: 'Aucun.' }),
+      h('div', { class: 'barre' }, h('span', { class: 'aide', text: 'Sessions automatiques du directeur : ' + T.sessionsAujourdhui + ' aujourd\'hui, plafond par jour ' }), plaf,
+        btn2('Enregistrer', () => act({ op: 'telegram.plafond', n: Number(plaf.value) }, 'Plafond enregistré'))));
+
+    vider($('#v-reglages'), sources, telegram, jiraC, notion, github,
       h('div', { class: 'carte' }, h('h3', { text: 'Siège' }), h('p', { class: 'mono muted', text: E.racine }),
         h('p', { class: 'aide', text: 'Jetons et clé privée restent sur ce poste (~/.siege, droits 600) et ne sont jamais renvoyés à la page.' })));
   }

@@ -8,10 +8,7 @@
       "Read(~/.config/gh/**)",
       "Edit(/droits/**)",
       "Edit(/.claude/**)",
-      "Edit(/siege/**)",
-      "Write(/droits/**)",
-      "Write(/.claude/**)",
-      "Write(/siege/**)"
+      "Edit(/siege/**)"
     ],
     "allow": [
       "Bash(node siege/backlog.js:*)"
@@ -48,7 +45,8 @@
     "excludedCommands": [
       "node siege/backlog.js *",
       "node siege/github.js *",
-      "node siege/exception.js *"
+      "node siege/exception.js *",
+      "node siege/demande.js *"
     ],
     "network": {
       "allowedDomains": [

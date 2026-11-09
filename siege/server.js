@@ -14,6 +14,17 @@ const { questionsOuvertes } = require('./backlog');
 const exceptions = require('./lib/exceptions'), parametres = require('./lib/parametres'), skills = require('./lib/skills'), droits = require('./droits');
 const fs = require('fs'), os = require('os');
 const jira = require('./lib/jira'), integrations = require('./lib/integrations'), gh = require('./lib/github');
+const tg = require('./lib/telegram'), demandes = require('./lib/demandes'), { Messagerie } = require('./lib/messagerie');
+
+// Telegram : sujets dont le CEO est prévenu une fois chacun (questions d'agents, exceptions à décider)
+async function sujetsCeo() {
+  const out = [];
+  for (const q of (await questionsEnAttente()).liste) out.push([`question:${q.id}:${q.question.date || q.question.texte.slice(0, 40)}`, `Question de ${q.question.auteur} sur ${q.id} (${q.titre}) :\n${q.question.texte.slice(0, 1500)}\n\nRépondez dans le Siège (Backlog › ${q.id}).`]);
+  for (const e of exceptions.lire().liste.filter(x => x.statut === 'demandee')) out.push([`exception:${e.id}`, `Exception à décider : ${e.id} — ${e.agent}${e.ticket ? ' sur ' + e.ticket : ''}, ${e.type} « ${String(e.motif).slice(0, 200)} ».\nJustification : ${String(e.justification).slice(0, 500)}\nAccordez ou refusez dans Siège › Droits (jamais depuis Telegram).`]);
+  return out;
+}
+const messagerie = new Messagerie({ racine: cfg.F.racine, journal: m => console.log('[telegram] ' + m), extras: sujetsCeo });
+let botTelegram = '';
 
 // Derniers événements de la garde (refus, exceptions utilisées ou terminées), du plus récent au plus ancien
 function journalGarde(n = 40) {
@@ -61,6 +72,9 @@ async function etat() {
   return {
     csrf: CSRF, genere: Date.now(), racine: cfg.F.racine,
     source: { type: s.type, jeton: s.type === 'jira' ? !!cfg.jetonJira() : !!cfg.jeton(), configure: s.type === 'notion' ? !!(s.bases && s.bases.features && s.bases.bugs) : s.type === 'jira' ? !!(s.champs && s.champs.ID) : true },
+    telegram: (() => { const t = tg.lire(); return { actif: t.actif, jeton: !!tg.jeton(), bot: botTelegram, ceo: t.ceo, collaborateurs: t.collaborateurs, enAttente: t.enAttente,
+      plafondJour: t.plafondJour || 50, sessionsAujourdhui: t.sessions[new Date().toISOString().slice(0, 10)] || 0, enCours: messagerie.enCours, file: messagerie.attente }; })(),
+    demandes: demandes.lire().liste.slice(-200).reverse(),
     integrations: integrations.vue({ racine: cfg.F.racine, prive: cfg.F.prive, source: s, jetonNotion: cfg.jeton(), jetonJira: cfg.jetonJira(), filiales: fil }),
     schemas: Object.fromEntries(Object.entries(COLLECTIONS).map(([n, c]) => [n, { libelle: c.libelle, champs: c.champs }])), etapes: ETAPES,
     filiales: fil, agents: ag, rolesFiliale: ROLES_FILIALE, modeles: MODELES, outils: OUTILS,
@@ -155,6 +169,31 @@ async function action(op) {
     case 'github.config': return integrations.configurerGithub(cfg.F.racine, await filiales(cfg.F.filiales), op);
     case 'github.cle': integrations.enregistrerCle(cfg.F.prive, op.pem); return { ok: true };
     case 'github.tester': return integrations.testerGithub(cfg.F.racine);
+    // Telegram (option) : bot, CEO, collaborateurs autorisés, plafond de sessions automatiques du directeur
+    case 'telegram.jeton': tg.enregistrerJeton(op.jeton); return { ok: true };
+    case 'telegram.tester': { const m = await tg.appel('getMe'); botTelegram = m.username || ''; return { bot: botTelegram }; }
+    case 'telegram.activer': {
+      if (op.oui && !tg.jeton()) refus('Enregistrez d\'abord le jeton du bot');
+      tg.modifier(s => { s.actif = !!op.oui; }); if (op.oui) messagerie.demarrer(); return { ok: true };
+    }
+    case 'telegram.ceo': case 'telegram.autoriser': {
+      const id = Number(op.id), nom = String(op.nom || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 80);
+      const p = tg.modifier(s => {
+        const v = s.enAttente.find(a => a.id === id) || s.collaborateurs.find(c => c.id === id) || (s.ceo && s.ceo.id === id ? s.ceo : null);
+        if (!v) return null;
+        s.enAttente = s.enAttente.filter(a => a.id !== id);
+        const pers = { id, nom: nom || v.nom, username: v.username || '', depuis: new Date().toISOString() };
+        if (op.op === 'telegram.ceo') { s.ceo = pers; s.collaborateurs = s.collaborateurs.filter(c => c.id !== id); }
+        else { if (s.ceo && s.ceo.id === id) s.ceo = null; s.collaborateurs = s.collaborateurs.filter(c => c.id !== id).concat(pers); }
+        return pers;
+      });
+      if (!p) refus('Personne inconnue : elle doit d\'abord écrire /start au bot');
+      await tg.envoyer(id, op.op === 'telegram.ceo' ? 'Vous êtes enregistré comme CEO : je vous préviendrai ici quand une décision vous revient.' : `Bonjour ${p.nom}, votre accès est ouvert. Écrivez-moi votre besoin (bug ou évolution) : je vous réponds ici.`).catch(() => {});
+      return p;
+    }
+    case 'telegram.retirer': tg.modifier(s => { const id = Number(op.id); s.collaborateurs = s.collaborateurs.filter(c => c.id !== id); s.enAttente = s.enAttente.filter(a => a.id !== id); if (s.ceo && s.ceo.id === id) s.ceo = null; }); return { ok: true };
+    case 'telegram.plafond': { const n = Number(op.n); if (!Number.isInteger(n) || n < 1 || n > 1000) refus('Plafond entre 1 et 1000 sessions par jour'); tg.modifier(s => { s.plafondJour = n; }); return { ok: true }; }
+    case 'demande.relancer': { const x = demandes.lire().liste.find(y => y.id === op.id); if (!x || !demandes.ouverte(x)) refus('Demande close ou introuvable'); messagerie.planifier(x.id); return { ok: true }; }
     case 'backlog.importer':
     case 'notion.importer': {
       if (!['notion', 'jira'].includes(cfg.lireSource().type)) refus('Branchez Notion ou Jira d\'abord');
@@ -214,7 +253,7 @@ const serveur = http.createServer(async (req, res) => {
       if (!egal(req.headers['x-siege-csrf'], CSRF) || !/^application\/json/.test(req.headers['content-type'] || '')) return envoyer(403, { erreur: 'Jeton de page manquant : rechargez la page' });
       let op; try { op = JSON.parse(await corps(req)); } catch { return envoyer(400, { erreur: 'Requête illisible' }); }
       try { return envoyer(200, { ok: true, resultat: (await action(op)) || null }); }
-      catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException || e instanceof integrations.ErreurIntegration || e instanceof gh.ErreurGithub) return envoyer(400, { erreur: e.message }); throw e; }
+      catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException || e instanceof integrations.ErreurIntegration || e instanceof gh.ErreurGithub || e instanceof tg.ErreurTelegram || e instanceof demandes.ErreurDemande) return envoyer(400, { erreur: e.message }); throw e; }
     }
     if (req.method !== 'GET') return envoyer(405, { erreur: 'Méthode refusée' });
     const rel = u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname).replace(/^\/+/, '');
@@ -224,5 +263,8 @@ const serveur = http.createServer(async (req, res) => {
   } catch (e) { console.error(e); envoyer(500, { erreur: 'Erreur interne' }); }
 });
 
-if (require.main === module) serveur.listen(PORT, HOST, () => console.log(`Le Siège : http://${HOST}:${PORT}/  (racine ${cfg.F.racine})`));
-module.exports = { serveur, action, etat };
+if (require.main === module) {
+  serveur.listen(PORT, HOST, () => console.log(`Le Siège : http://${HOST}:${PORT}/  (racine ${cfg.F.racine})`));
+  if (tg.lire().actif) messagerie.demarrer();
+}
+module.exports = { serveur, action, etat, messagerie };

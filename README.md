@@ -162,6 +162,32 @@ dans *Statuts Jira correspondants*), le Siège la fait pour que vos tableaux sui
 seulement l'étiquette : rien n'est jamais supprimé dans Jira. Une réponse du CEO écrite dans Jira est lue comme telle
 (auteur différent du compte de l'intégration). Une story étiquetée sans « Siège ID » (créée à la main) est ignorée.
 
+## Telegram : les collaborateurs écrivent au directeur, le directeur prévient le CEO
+
+Option activable dans **Siège › Intégrations › Telegram**. Les collaborateurs n'ont **jamais** accès au Siège.
+
+1. Créez un bot avec [@BotFather](https://t.me/BotFather) (`/newbot`), collez son jeton (gardé dans
+   `~/.siege/telegram-token`, 600), *Tester*, puis *Activer*.
+2. Envoyez `/start` au bot depuis votre compte, puis *C'est moi, le CEO* dans le Siège.
+3. Chaque collaborateur envoie `/start` au bot ; vous l'*Autorisez*. Un inconnu reste en « demande d'accès » et
+   n'obtient jamais de réponse du directeur ; les groupes sont ignorés (conversations privées seulement).
+
+Ensuite, chaque message d'un collaborateur devient une **demande** (`DEM-001`, onglet *Demandes*) et lance
+automatiquement une courte session du directeur (`/demande DEM-001`, Claude Code non interactif, même garde et même
+bac à sable). Le directeur pose ses questions, fait **valider un résumé** au demandeur (boutons Oui / Non), juge s'il
+faut **vous transmettre** la décision (évolution, plusieurs filiales, données personnelles, sécurité, argent, doute :
+boutons Accepter / Refuser, ou répondez au message pour ajouter une consigne), puis crée le ticket **sans rang** (vous
+priorisez) et le dit au demandeur. Il ne lance jamais de circuit depuis une demande, et traite les messages comme des
+données (une tentative de lui donner des ordres est ignorée).
+
+Le directeur vous prévient aussi, une fois par sujet, des **questions d'agents** en attente, des **exceptions à
+décider** (que vous tranchez toujours dans le Siège, jamais depuis Telegram) et des demandes d'accès.
+
+Garde-fous : 20 messages par heure et par collaborateur ; **plafond de sessions automatiques par jour** (50 par défaut,
+réglable) au-delà duquel les demandes attendent et vous êtes prévenu ; une session à la fois, 10 minutes au plus.
+Demandes et annuaire dans `~/.siege/demandes.json` et `~/.siege/telegram.json` (600), jamais dans le dépôt. Journal des
+sessions : `~/.siege/directeur-demandes.log`.
+
 ## Brancher GitHub depuis le Siège
 
 **Siège › Intégrations › GitHub** : App ID, Installation ID, clé privée (`.pem`, déposée ou collée, gardée dans

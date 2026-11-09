@@ -137,3 +137,11 @@ label.champ.coche{display:flex;align-items:center;gap:8px;grid-column:1/-1}
 .carte h3 .tag{margin-left:6px;vertical-align:middle}
 .carte details{margin:8px 0}
 .carte details summary{cursor:pointer;font-size:13px}
+/* Demandes */
+.carte.demande summary{cursor:pointer;line-height:1.7}
+.fil{display:grid;gap:8px;margin:10px 0}
+.fil .msg{margin:0;padding:8px 10px;border-radius:8px;background:var(--sunk);white-space:pre-wrap;max-width:80ch}
+.fil .msg.dir{border-left:3px solid var(--dir)}
+.fil .msg.ceo{border-left:3px solid var(--wait)}
+.carte h4{margin:14px 0 6px;font-size:13px}
+.carte ul{margin:0;padding-left:18px;display:grid;gap:6px}

@@ -7,7 +7,7 @@ const fs = require('fs'), path = require('path');
 const { ErreurBacklog } = require('./backlog');
 
 const DOMAINES_BASE = ['github.com', 'api.github.com', 'codeload.github.com', '*.githubusercontent.com', 'api.notion.com'];
-const OUTILS_SIEGE = ['node siege/backlog.js *', 'node siege/github.js *', 'node siege/exception.js *'];   // lisent les secrets : hors bac à sable, filtrés par la garde
+const OUTILS_SIEGE = ['node siege/backlog.js *', 'node siege/github.js *', 'node siege/exception.js *', 'node siege/demande.js *'];   // lisent les secrets : hors bac à sable, filtrés par la garde
 const TYPES = {
   domaine: { libelle: 'Domaine réseau autorisé', motif: /^(\*\.)?([a-z0-9-]+\.)+[a-z]{2,}$/i },
   commande: { libelle: 'Commande exécutée hors bac à sable', motif: /^[a-zA-Z0-9][\w./-]*( [\w./*:=-]+)*$/ },
@@ -28,7 +28,7 @@ function settings(racine) {
   return {
     _genere_par: 'node siege/droits.js — ne pas modifier à la main : Siège › Droits',
     permissions: {
-      deny: ['Read(~/.siege/**)', 'Read(~/.ssh/**)', 'Read(~/.aws/**)', 'Read(~/.config/gh/**)', 'Edit(/droits/**)', 'Edit(/.claude/**)', 'Edit(/siege/**)', 'Write(/droits/**)', 'Write(/.claude/**)', 'Write(/siege/**)'],
+      deny: ['Read(~/.siege/**)', 'Read(~/.ssh/**)', 'Read(~/.aws/**)', 'Read(~/.config/gh/**)', 'Edit(/droits/**)', 'Edit(/.claude/**)', 'Edit(/siege/**)'],   // Edit couvre tous les outils d'écriture
       allow: ['Bash(node siege/backlog.js:*)']
     },
     hooks: {

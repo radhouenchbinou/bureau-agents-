@@ -69,7 +69,8 @@
       "bash": [
         "^node siege/backlog\\.js (maj|creer|commenter)\\b",
         "^node siege/exception\\.js (demander|activer|terminer)\\b",
-        "^node siege/github\\.js etat\\b"
+        "^node siege/github\\.js etat\\b",
+        "^node siege/demande\\.js (liste|voir|repondre|valider|escalader|ticket|refuser|clore|notifier)\\b"
       ],
       "web": [],
       "github": {},
