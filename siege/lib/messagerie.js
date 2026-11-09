@@ -207,11 +207,16 @@ function lancerClaude(racine, id, journal) {
     const f = path.join(PRIVE(), 'directeur-demandes.log');
     const out = fs.openSync(f, 'a');
     fs.writeSync(out, `\n=== ${new Date().toISOString()} /demande ${id}\n`);
+    // Journal par agent (EIA-017) : jamais d'exception ni d'effet sur la session (R8) ; le ticket n'existe pas encore au lancement
+    const J = require('./journal-agents'), debut = Date.now(); let jid = null, sortie = '', coupe = false;
+    try { jid = J.ouvrir({ role: 'directeur', ticket: '', etape: 'Demande ' + id, moteur: 'claude' }); } catch {}
+    const fermer = (code, texte) => { try { if (jid) J.clore('directeur', jid, { code, sortie: texte, duree: (Date.now() - debut) / 1000, etat: coupe ? 'interrompu' : undefined }); } catch {} };
     const p = spawn(process.env.CLAUDE_BIN || 'claude', ['-p', `/demande ${id}`, '--output-format', 'text',
-      '--allowedTools', 'Bash(node siege/demande.js:*)', 'Bash(node siege/backlog.js:*)', 'Read', 'Grep', 'Glob'], { cwd: racine, stdio: ['ignore', out, out] });
-    const t = setTimeout(() => { p.kill('SIGTERM'); journal(`session ${id} arrêtée après 10 min`); }, SESSION_MAX_MS);
-    p.on('error', e => { clearTimeout(t); fs.closeSync(out); ko(e); });
-    p.on('exit', c => { clearTimeout(t); fs.closeSync(out); c === 0 ? ok() : ko(new Error('code ' + c)); });
+      '--allowedTools', 'Bash(node siege/demande.js:*)', 'Bash(node siege/backlog.js:*)', 'Read', 'Grep', 'Glob'], { cwd: racine, stdio: ['ignore', 'pipe', out] });
+    p.stdout.on('data', d => { fs.writeSync(out, d); sortie = (sortie + d).slice(-20000); });
+    const t = setTimeout(() => { coupe = true; p.kill('SIGTERM'); journal(`session ${id} arrêtée après 10 min`); }, SESSION_MAX_MS);
+    p.on('error', e => { clearTimeout(t); fermer(null, e.message); fs.closeSync(out); ko(e); });
+    p.on('close', c => { clearTimeout(t); fermer(c, sortie); fs.closeSync(out); c === 0 ? ok() : ko(new Error('code ' + c)); });
   });
 }
 

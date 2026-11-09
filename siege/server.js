@@ -8,7 +8,7 @@ const cfg = require('./lib/config');
 const { COLLECTIONS, ETAPES, ErreurBacklog, file, reclasser, prochainId } = require('./lib/backlog');
 const { Agents, MODELES, OUTILS, ROLES_FILIALE } = require('./lib/agents');
 const { filiales } = require('./lib/registre');
-const activite = require('./lib/activite');
+const activite = require('./lib/activite'), journalAgents = require('./lib/journal-agents');
 const { creerBases, idDepuisLien } = require('./lib/notion');
 const { questionsOuvertes } = require('./backlog');
 const exceptions = require('./lib/exceptions'), parametres = require('./lib/parametres'), skills = require('./lib/skills'), droits = require('./droits');
@@ -23,6 +23,8 @@ async function sujetsCeo() {
   const out = [];
   for (const q of (await questionsEnAttente()).liste) out.push([`question:${q.id}:${q.question.date || q.question.texte.slice(0, 40)}`, `Question de ${q.question.auteur} sur ${q.id} (${q.titre}) :\n${q.question.texte.slice(0, 1500)}\n\nRépondez dans le Siège (Backlog › ${q.id}).`]);
   for (const e of exceptions.lire().liste.filter(x => x.statut === 'demandee')) out.push([`exception:${e.id}`, `Exception à décider : ${e.id} — ${e.agent}${e.ticket ? ' sur ' + e.ticket : ''}, ${e.type} « ${String(e.motif).slice(0, 200)} ».\nJustification : ${String(e.justification).slice(0, 500)}\nAccordez ou refusez dans Siège › Droits (jamais depuis Telegram).`]);
+  const je = journalAgents.erreurJournal();   // écriture du journal des agents impossible (EIA-017, R8) : une fois par jour
+  if (je) out.push([`journal-erreur:${String(je.date).slice(0, 10)}`, `Journal des agents : écriture impossible (${String(je.erreur).slice(0, 200)}). Les agents ne sont pas bloqués ; vérifiez le disque et les droits de ~/.siege/journaux.`]);
   return out;
 }
 const messagerie = new Messagerie({ racine: cfg.F.racine, journal: m => console.log('[telegram] ' + m), extras: sujetsCeo });
@@ -299,6 +301,13 @@ const serveur = http.createServer(async (req, res) => {
   if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host || '')) return envoyer(403, { erreur: 'Hôte refusé' });
   try {
     if (u.pathname === '/api/etat' && req.method === 'GET') return envoyer(200, await etat());
+    const mj = /^\/api\/agents\/([^/]+)\/journal$/.exec(u.pathname);
+    if (mj && req.method === 'GET') {
+      const role = mj[1];
+      if (!journalAgents.ROLE.test(role) || !(role === 'directeur' || (await agents.lister()).some(a => a.nom === role))) return envoyer(404, { erreur: 'Agent inconnu' });
+      journalAgents.reconcilier(role);
+      return envoyer(200, { ...journalAgents.lire(role, { depuis: u.searchParams.get('depuis'), nombre: u.searchParams.get('nombre') || 20 }), erreur_ecriture: journalAgents.erreurJournal() });
+    }
     if (u.pathname === '/api/commentaires' && req.method === 'GET') {
       const id = u.searchParams.get('id') || '';
       if (!/^([A-Z]{3}-\d{3}|BUG-\d{3})$/.test(id)) return envoyer(400, { erreur: 'Identifiant invalide' });
@@ -323,6 +332,9 @@ const serveur = http.createServer(async (req, res) => {
 
 if (require.main === module) {
   serveur.listen(PORT, HOST, () => console.log(`Le Siège : http://${HOST}:${PORT}/  (racine ${cfg.F.racine})`));
+  // Journal des agents : entrées orphelines closes « interrompu », rétention appliquée au démarrage puis toutes les heures
+  const entretien = () => { try { journalAgents.reconcilier(); journalAgents.purger(); } catch {} };
+  entretien(); setInterval(entretien, 3600e3).unref();
   if (tg.lire().actif || sl.lire().actif || tm.lire().actif) messagerie.demarrer();
 }
-module.exports = { serveur, action, etat, messagerie };
+module.exports = { serveur, action, etat, messagerie, sujetsCeo };
