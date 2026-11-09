@@ -140,6 +140,8 @@ function normaliser(outil, entree) {
 function decider(politique, brut, { racine, role, exceptions = [] }) {
   // Mode sans restriction décidé par le CEO (Siège › Admin) : tout passe, la garde ne fait que journaliser
   if (require('./mode-libre').actif(racine)) return { ok: true, libre: true };
+  // Session du mainteneur (siege/mainteneur.sh, rôle fixé par l'environnement de lancement, jamais par un sous-agent)
+  if (role === 'mainteneur') return { ok: true, libre: true };
   const { outil, entree = {} } = normaliser(brut.outil, brut.entree || {});
   const R = regles(politique, role);
   if (!R) return { ok: false, raison: `Rôle inconnu de droits/roles.json : ${role}` };

@@ -44,7 +44,8 @@ process.stdin.on('end', () => {
   let h; try { h = JSON.parse(brut); } catch { return bloquer('Garde : entrée illisible, action refusée.'); }
   // Rôle : celui du sous-agent ; sinon, pour un agent Copilot lancé par node siege/agent.js, SIEGE_ROLE (posé par l'outil,
   // hors de portée de l'agent) ; sinon le directeur
-  const role = h.agent_type || process.env.SIEGE_ROLE || 'directeur';
+  // « mainteneur » ne vient que de siege/mainteneur.sh (environnement) : un sous-agent qui porterait ce nom n'en a aucun droit
+  const role = h.agent_type ? (h.agent_type === 'mainteneur' ? 'sous-agent-mainteneur-refuse' : h.agent_type) : (process.env.SIEGE_ROLE || 'directeur');
   try {
     const ex = require('./lib/exceptions');
     if (h.hook_event_name === 'SubagentStop') {

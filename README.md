@@ -428,6 +428,21 @@ un groupe pour les contrats, et un backlog de 14 features en 4 jalons. On y trou
 des features avec dépendances, et une **feature multi-filiales livrée d'un bloc** (GRP-002 : acompte payé en ligne,
 une PR dans l'API et une dans la vitrine). Pour l'installer : `exemples/cyclofix/LISEZMOI.md`.
 
+## Mainteneur de l'Entreprise IA
+
+Pour faire évoluer le Siège lui-même (code, agents, droits, règles, documentation), le CEO lance une session de
+**mainteneur** : `bash siege/mainteneur.sh` (ou `bash siege/mainteneur.sh "première demande"`). Règle :
+[process/mainteneur.md](process/mainteneur.md).
+
+- **Aucune restriction** : les réglages du projet ne sont pas chargés (ni garde, ni bac à sable, ni interdictions),
+  et les demandes de permission sont désactivées (`--dangerously-skip-permissions`).
+- **Aucune obligation fonctionnelle** : ni rôle de directeur, ni circuit, ni portes, ni délégation ; il répond
+  directement aux demandes qu'on lui donne.
+- Le rôle vient seulement de l'environnement posé par ce script : un sous-agent nommé « mainteneur » n'a aucun droit,
+  et la garde refuse toute action d'un agent qui s'en réclamerait.
+
+À réserver à un poste que vous contrôlez : la session peut tout lire, écrire, exécuter et pousser.
+
 ## Licence
 
 [MIT](LICENSE) — © 2026 Radhouen Chbinou. Édition GitHub Copilot + Teams : [entreprise-agents-copilot](https://github.com/radhouenchbinou/entreprise-agents-copilot).

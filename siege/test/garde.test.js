@@ -157,3 +157,14 @@ test('commandes de travail : lecture pour tous, fichiers dans la zone du rôle, 
   assert.ok(!bash('dev-backend', 'curl https://exemple.com').ok, 'réseau');
   assert.ok(!bash('dev-backend', 'git push origin main').ok);
 });
+
+test('mainteneur : aucune restriction pour la session lancée par siege/mainteneur.sh, jamais pour un sous-agent', () => {
+  const { execFileSync } = require('child_process'), hook = path.join(__dirname, '..', 'garde.js');
+  const lance = (entree, env) => { try { execFileSync('node', [hook], { input: JSON.stringify(entree), env: { ...process.env, SIEGE_PRIVE: fs.mkdtempSync(path.join(os.tmpdir(), 'mt-')), ...env } }); return 0; } catch (e) { return e.status; } };
+  assert.ok(bash('mainteneur', 'git push --force origin main').ok);
+  assert.ok(garde.decider(P, { outil: 'Write', entree: { file_path: path.join(RACINE, 'droits/roles.json') } }, { racine: RACINE, role: 'mainteneur' }).ok);
+  const ecrire = { hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: path.join(RACINE, 'droits/roles.json'), content: 'x' } };
+  assert.strictEqual(lance(ecrire, { SIEGE_ROLE: 'mainteneur' }), 0, 'session mainteneur');
+  assert.strictEqual(lance({ ...ecrire, agent_type: 'mainteneur' }, {}), 2, 'sous-agent nommé mainteneur');
+  assert.strictEqual(lance(ecrire, { SIEGE_ROLE: '' }), 2, 'directeur');
+});
