@@ -4,6 +4,7 @@
 'use strict';
 const path = require('path');
 const gh = require('./lib/github');
+const { options, ErreurSiege } = require('./lib/options');
 const { filiales } = require('./lib/registre');
 const garde = require('./lib/garde');
 const cfgBacklog = require('./lib/config');
@@ -19,11 +20,10 @@ const AIDE = `GitHub des agents — usage : node siege/github.js <commande> --ro
   fusionner --role devops --filiale F --pr N               fusionne si le CEO a approuvé et revue + sécurité au vert
   fusionner --role devops --ticket PARENT                  livraison groupée : toutes les PR du lot, ou aucune
 `;
-const opts = a => { const o = {}; for (let i = 0; i < a.length; i++) if (a[i].startsWith('--')) o[a[i].slice(2)] = a[i + 1] !== undefined && !a[i + 1].startsWith('--') ? a[++i] : ''; return o; };
 const CONTEXTE_DU_ROLE = { reviewer: 'revue', 'rssi-devsecops': 'securite' };
 
 async function main(argv) {
-  const [cmd, ...a] = argv, o = opts(a);
+  const [cmd, ...a] = argv, { o } = options(a);
   if (!cmd || cmd === 'aide') return console.log(AIDE);
   const politique = garde.charger(RACINE), c = gh.config(RACINE), fil = await filiales(path.join(RACINE, 'portfolio', 'filiales.md'));
   if (cmd === 'etat') {
@@ -102,5 +102,5 @@ async function livraisonGroupee(o, role, c, politique, fil) {
   throw new gh.ErreurGithub(etat);
 }
 
-if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof gh.ErreurGithub ? 'Erreur : ' + e.message : 'Erreur : ' + (e.message || e)); process.exit(1); });
+if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof gh.ErreurGithub || e instanceof ErreurSiege ? 'Erreur : ' + e.message : 'Erreur : ' + (e.message || e)); process.exit(1); });
 module.exports = { main };

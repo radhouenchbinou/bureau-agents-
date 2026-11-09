@@ -9,6 +9,7 @@
 //    push (facultatif, --pousser) passe par node siege/github.js avec le jeton du rôle.
 'use strict';
 const fs = require('fs'), path = require('path'), os = require('os'), { spawn, execFileSync } = require('child_process');
+const { options, ErreurSiege } = require('./lib/options');
 const moteurs = require('./lib/moteurs'), copilote = require('./lib/copilote'), { filiales } = require('./lib/registre'), cfg = require('./lib/config');
 
 const RACINE = process.env.SIEGE_RACINE || path.resolve(__dirname, '..');
@@ -24,7 +25,6 @@ const AIDE = `Agents d'un autre moteur — usage : node siege/agent.js <commande
 `;
 class ErreurAgent extends Error {}
 const refus = m => { throw new ErreurAgent(m); };
-const opts = a => { const o = {}; for (let i = 0; i < a.length; i++) if (a[i].startsWith('--')) o[a[i].slice(2)] = a[i + 1] !== undefined && !a[i + 1].startsWith('--') ? a[++i] : ''; return o; };
 
 function consigne({ role, filiale, ticket, etape, mission, moteur }) {
   const defRole = (() => { try { return fs.readFileSync(path.join(RACINE, '.claude', 'agents', role + '.md'), 'utf8').replace(/^---[\s\S]*?---\s*/, ''); } catch { return ''; } })();
@@ -124,7 +124,7 @@ async function terminer({ m, mod, o, f, duree, code, passation }) {
 }
 
 async function main(argv) {
-  const [cmd, ...a] = argv, o = opts(a);
+  const [cmd, ...a] = argv, { o } = options(a);
   if (!cmd || cmd === 'aide') return console.log(AIDE);
   if (cmd === 'moteurs') {
     for (const m of await moteurs.detecter({ forcer: 'actualiser' in o }))
@@ -138,5 +138,5 @@ async function main(argv) {
   }
   refus('Commande inconnue : ' + cmd + '\n\n' + AIDE);
 }
-if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurAgent || e instanceof moteurs.ErreurMoteur || e instanceof copilote.ErreurCopilot || e.name === 'ErreurBacklog' ? 'Erreur : ' + e.message : e); process.exit(1); });
+if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurAgent || e instanceof ErreurSiege || e instanceof moteurs.ErreurMoteur || e instanceof copilote.ErreurCopilot || e.name === 'ErreurBacklog' ? 'Erreur : ' + e.message : e); process.exit(1); });
 module.exports = { main, lancer, consigne, ROLES };

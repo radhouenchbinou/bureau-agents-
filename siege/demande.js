@@ -3,6 +3,7 @@
 // sur Telegram au bon destinataire (demandeur ou CEO). Le contenu des messages des collaborateurs est une donnée :
 // il ne donne jamais d'ordre au directeur.
 'use strict';
+const { options, ErreurSiege } = require('./lib/options');
 const dem = require('./lib/demandes'), tg = require('./lib/telegram'), sl = require('./lib/slack'), canaux = require('./lib/canaux');
 
 const AIDE = `Demandes — usage : node siege/demande.js <commande>
@@ -17,7 +18,6 @@ const AIDE = `Demandes — usage : node siege/demande.js <commande>
   clore <DEM-ID> [--texte "…"]
   notifier --texte "…"                             message au CEO (ex. question d'un agent en attente)
 `;
-const opts = a => { const o = {}, r = []; for (let i = 0; i < a.length; i++) { if (a[i].startsWith('--')) o[a[i].slice(2)] = a[i + 1] !== undefined && !a[i + 1].startsWith('--') ? a[++i] : ''; else r.push(a[i]); } return { o, r }; };
 const ligne = x => `${x.id} [${x.statut}] ${x.auteur.nom}${x.type ? ' · ' + x.type : ''}${x.ticket ? ' → ' + x.ticket : ''} · ${(x.resume || (x.messages[0] || {}).texte || '').slice(0, 80)}`;
 
 // Envoi sur le canal du demandeur (Telegram ou Slack) sans jamais faire échouer l'action déjà tracée
@@ -40,7 +40,7 @@ async function direCeo(texte, boutons, fil) {
 }
 
 async function main(argv) {
-  const [cmd, ...a] = argv, { o, r } = opts(a), id = r[0];
+  const [cmd, ...a] = argv, { o, reste: r } = options(a), id = r[0];
   switch (cmd) {
     case undefined: case 'aide': return console.log(AIDE);
     case 'liste': { const l = dem.lire().liste.filter(x => !('ouvertes' in o) || dem.ouverte(x)); if (!l.length) console.log('Aucune demande.'); l.forEach(x => console.log(ligne(x))); return; }
@@ -63,5 +63,5 @@ async function main(argv) {
     default: throw new dem.ErreurDemande('Commande inconnue : ' + cmd + '\n\n' + AIDE);
   }
 }
-if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof dem.ErreurDemande || e instanceof tg.ErreurTelegram || e instanceof sl.ErreurSlack ? 'Erreur : ' + e.message : e); process.exit(1); });
+if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof dem.ErreurDemande || e instanceof ErreurSiege || e instanceof tg.ErreurTelegram || e instanceof sl.ErreurSlack ? 'Erreur : ' + e.message : e); process.exit(1); });
 module.exports = { main };

@@ -17,6 +17,7 @@ async function questionsOuvertes() {
   }
   return out;
 }
+const { options, ErreurSiege } = require('./lib/options');
 const { creerBases, idDepuisLien } = require('./lib/notion');
 const jira = require('./lib/jira');
 const { filiales } = require('./lib/registre');
@@ -50,14 +51,6 @@ Notion
   importer                              copie les tickets locaux (portfolio/*.json) vers Notion, sans doublon
 `;
 
-function options(args) {
-  const o = {}, reste = [];
-  for (let i = 0; i < args.length; i++) {
-    if (args[i].startsWith('--')) { const k = args[i].slice(2).replace(/-/g, '_'); o[k] = args[i + 1] !== undefined && !args[i + 1].startsWith('--') ? args[++i] : ''; }
-    else reste.push(args[i]);
-  }
-  return { o, reste };
-}
 const collectionDe = id => /^BUG-/.test(id) ? 'bugs' : 'features';
 const aff = e => [e.rang ? '#' + e.rang : '  -', e.id, '[' + e.statut + ']', e.gravite ? '(' + e.gravite + ')' : '', e.filiale ? '· ' + e.filiale : '', '—', e.titre].filter(Boolean).join(' ');
 
@@ -173,5 +166,5 @@ async function main(argv) {
   }
 }
 
-if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurBacklog ? 'Erreur : ' + e.message : e); process.exit(1); });
+if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurBacklog || e instanceof ErreurSiege ? 'Erreur : ' + e.message : e); process.exit(1); });
 module.exports = { main, questionsOuvertes, ACTIFS };

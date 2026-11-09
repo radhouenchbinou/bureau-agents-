@@ -5,6 +5,7 @@
 'use strict';
 const fs = require('fs'), path = require('path');
 const { filiales } = require('./lib/registre');
+const { options, ErreurSiege } = require('./lib/options');
 
 const RACINE = process.env.SIEGE_RACINE || path.resolve(__dirname, '..');
 const REGISTRE = path.join(RACINE, 'portfolio', 'filiales.md');
@@ -16,7 +17,6 @@ const AIDE = `Filiales — usage : node siege/filiale.js <commande>
 `;
 class ErreurFiliale extends Error {}
 const refus = m => { throw new ErreurFiliale(m); };
-const opts = a => { const o = {}; for (let i = 0; i < a.length; i++) if (a[i].startsWith('--')) o[a[i].slice(2)] = a[i + 1] !== undefined && !a[i + 1].startsWith('--') ? a[++i] : ''; return o; };
 
 async function ajouter(o) {
   const nom = String(o.nom || '').replace(/[|`\u0000-\u001f]/g, '').trim();
@@ -47,11 +47,11 @@ async function ajouter(o) {
 }
 
 async function main(argv) {
-  const [cmd, ...a] = argv, o = opts(a);
+  const [cmd, ...a] = argv, { o } = options(a);
   if (!cmd || cmd === 'aide') return console.log(AIDE);
   if (cmd === 'liste') return (await filiales(REGISTRE)).forEach(f => console.log(`${f.prefixe}  ${f.nom.padEnd(16)} ${f.dossier}  (repo ${f.repo || '—'})`));
   if (cmd === 'ajouter') { const r = await ajouter(o); return console.log(`Filiale ${r.nom} (${r.prefixe}) intégrée : fiche ${r.dossier}/CLAUDE.md, docs/, registre mis à jour.`); }
   refus('Commande inconnue : ' + cmd + '\n\n' + AIDE);
 }
-if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurFiliale ? 'Erreur : ' + e.message : e); process.exit(1); });
+if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurFiliale || e instanceof ErreurSiege ? 'Erreur : ' + e.message : e); process.exit(1); });
 module.exports = { main, ajouter, ErreurFiliale };
