@@ -25,9 +25,10 @@ test('agents : créer, modifier, refuser les noms et outils invalides, supprimer
   assert.deepStrictEqual(analyser(formater(a), 'x.md').outils, ['Read', 'Bash']);
 });
 
-test('registre des filiales du kit', async () => {
-  const f = await filiales(path.join(__dirname, '..', '..', 'portfolio', 'filiales.md'));
-  assert.deepStrictEqual(f.map(x => x.prefixe), ['COL', 'DON', 'PIL', 'PLA', 'GRP']);
+test('registre des filiales : lignes du tableau, préfixes à 3 lettres seulement', async () => {
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'reg-')), 'filiales.md');
+  fs.writeFileSync(f, '# Registre\n\n| Filiale | Préfixe | Dossier | Repo git | Statut |\n|---|---|---|---|---|\n| Collecte | COL | `projets/x/collecte` | `projets/x` | Active |\n| Groupe | GRP | `portfolio` | — | Transverse |\n| Mauvaise | TROP | `y` | | |\n');
+  assert.deepStrictEqual((await filiales(f)).map(x => [x.nom, x.prefixe, x.dossier, x.repo]), [['Collecte', 'COL', 'projets/x/collecte', 'projets/x'], ['Groupe', 'GRP', 'portfolio', '—']]);
 });
 
 test('activité : sessions du Siège et missions des sous-agents', async () => {
