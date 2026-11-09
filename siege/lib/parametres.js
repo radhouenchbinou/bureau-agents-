@@ -39,12 +39,13 @@ function settings(racine) {
   return {
     _genere_par: 'node siege/droits.js — ne pas modifier à la main : Siège › Droits',
     permissions: {
-      deny: ['Read(~/.siege/**)', 'Read(~/.ssh/**)', 'Read(~/.aws/**)', 'Read(~/.config/gh/**)', 'Edit(/droits/**)', 'Edit(/.claude/**)', 'Edit(/siege/**)'],   // Edit couvre tous les outils d'écriture
+      deny: ['Read(~/.siege/**)', 'Read(~/.ssh/**)', 'Read(~/.aws/**)', 'Read(~/.config/gh/**)'],   // écriture dans droits/, .claude/, siege/ : refusée par la garde à tous les rôles sauf la session mainteneur
       allow: ['Bash(node siege/backlog.js:*)']
     },
     hooks: {
       PreToolUse: crochet('node "$CLAUDE_PROJECT_DIR/siege/garde.js"'),
-      SubagentStop: crochet('node "$CLAUDE_PROJECT_DIR/siege/garde.js"')
+      SubagentStop: crochet('node "$CLAUDE_PROJECT_DIR/siege/garde.js"'),
+      UserPromptSubmit: [{ hooks: [{ type: 'command', command: 'node "$CLAUDE_PROJECT_DIR/siege/garde.js"' }] }]
     },
     sandbox: {
       enabled: true,

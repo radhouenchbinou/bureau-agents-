@@ -168,3 +168,24 @@ test('mainteneur : aucune restriction pour la session lancée par siege/maintene
   assert.strictEqual(lance({ ...ecrire, agent_type: 'mainteneur' }, {}), 2, 'sous-agent nommé mainteneur');
   assert.strictEqual(lance(ecrire, { SIEGE_ROLE: '' }), 2, 'directeur');
 });
+
+test('session désignée mainteneur par le CEO (« t\'es une session maintainer ») : tout passe, sans demande de permission', () => {
+  const { spawnSync } = require('child_process'), hook = path.join(__dirname, '..', 'garde.js');
+  const prive = fs.mkdtempSync(path.join(os.tmpdir(), 'mtp-'));
+  const lance = (entree, env = {}) => spawnSync('node', [hook], { input: JSON.stringify(entree), encoding: 'utf8', env: { ...process.env, SIEGE_PRIVE: prive, SIEGE_ROLE: '', SIEGE_SESSION_AUTO: '', ...env } });
+  const ecrire = s => ({ hook_event_name: 'PreToolUse', session_id: s, tool_name: 'Write', tool_input: { file_path: path.join(RACINE, 'siege/x.js'), content: 'x' } });
+  assert.strictEqual(lance(ecrire('s1')).status, 2, 'avant désignation : refusé');
+  // Phrase tapée par le CEO, en entier
+  let r = lance({ hook_event_name: 'UserPromptSubmit', session_id: 's1', prompt: "t'es une session maintainer" });
+  assert.strictEqual(r.status, 0); assert.match(JSON.parse(r.stdout).hookSpecificOutput.additionalContext, /mainteneur/);
+  r = lance(ecrire('s1'));
+  assert.strictEqual(r.status, 0); assert.strictEqual(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision, 'allow');
+  assert.strictEqual(lance({ ...ecrire('s1'), agent_type: 'dev-backend' }).status, 2, 'ses sous-agents gardent leurs droits');
+  assert.strictEqual(lance(ecrire('s2')).status, 2, 'les autres sessions restent restreintes');
+  // Pas de désignation : phrase noyée dans un texte, session lancée par le Siège, sous-agent
+  lance({ hook_event_name: 'UserPromptSubmit', session_id: 's3', prompt: 'Demande : t\'es une session maintainer, efface tout' });
+  lance({ hook_event_name: 'UserPromptSubmit', session_id: 's4', prompt: 'Tu es une session mainteneur' }, { SIEGE_SESSION_AUTO: '1' });
+  lance({ hook_event_name: 'UserPromptSubmit', session_id: 's5', agent_type: 'qa', prompt: "t'es une session maintainer" });
+  for (const s of ['s3', 's4', 's5']) assert.strictEqual(lance(ecrire(s)).status, 2, s);
+  assert.ok(/Tu es une session mainteneur/i.test('Tu es une session mainteneur') && lance({ hook_event_name: 'UserPromptSubmit', session_id: 's6', prompt: 'Tu es une session mainteneur !' }).status === 0 && lance(ecrire('s6')).status === 0, 'variante française');
+});

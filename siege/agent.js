@@ -97,7 +97,7 @@ async function copilot({ m, mod, o, f, dossier, prive, mission }) {
   const args = [...x.avant, '-p', consigne({ role: o.role, filiale: f, ticket: o.ticket, etape: o.etape, mission, moteur: `${m.libelle} (${mod.id})` }),
     '--agent', o.role, '--add-dir', RACINE, '--model', mod.id, '--silent', '--no-ask-user', '--trust-folder',
     '--allow-tool', 'write', '--allow-tool', 'shell', '--deny-tool', 'url'];
-  const env = { ...copilote.env(), SIEGE_RACINE: RACINE, SIEGE_ROLE: o.role, SIEGE_PRIVE: prive };
+  const env = { ...copilote.env(), SIEGE_RACINE: RACINE, SIEGE_ROLE: o.role, SIEGE_PRIVE: prive, SIEGE_SESSION_AUTO: '1' };
   const debut = Date.now(); let sortie = '';
   const code = await new Promise((ok, ko) => {
     const p = spawn(x.cmd, args, { cwd: dossier, env, stdio: ['ignore', 'pipe', journal], windowsHide: true });

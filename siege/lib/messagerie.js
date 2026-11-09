@@ -208,7 +208,7 @@ function lancerClaude(racine, id, journal) {
     const out = fs.openSync(f, 'a');
     fs.writeSync(out, `\n=== ${new Date().toISOString()} /demande ${id}\n`);
     const p = spawn(process.env.CLAUDE_BIN || 'claude', ['-p', `/demande ${id}`, '--output-format', 'text',
-      '--allowedTools', 'Bash(node siege/demande.js:*)', 'Bash(node siege/backlog.js:*)', 'Read', 'Grep', 'Glob'], { cwd: racine, stdio: ['ignore', out, out] });
+      '--allowedTools', 'Bash(node siege/demande.js:*)', 'Bash(node siege/backlog.js:*)', 'Read', 'Grep', 'Glob'], { cwd: racine, stdio: ['ignore', out, out], env: { ...process.env, SIEGE_SESSION_AUTO: '1' } });
     const t = setTimeout(() => { p.kill('SIGTERM'); journal(`session ${id} arrêtée après 10 min`); }, SESSION_MAX_MS);
     p.on('error', e => { clearTimeout(t); fs.closeSync(out); ko(e); });
     p.on('exit', c => { clearTimeout(t); fs.closeSync(out); c === 0 ? ok() : ko(new Error('code ' + c)); });

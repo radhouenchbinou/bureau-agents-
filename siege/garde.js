@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Hook de Claude Code (.claude/settings.json) :
 //   PreToolUse   → refuse (code 2 + raison sur stderr) toute action hors des droits du rôle, sauf exception active ;
-//   SubagentStop → ferme les exceptions actives de l'agent qui vient de terminer sa tâche.
+//   SubagentStop → ferme les exceptions actives de l'agent qui vient de terminer sa tâche ;
+//   UserPromptSubmit → « t'es une session maintainer » tapé par le CEO désigne la session mainteneur.
 // Chaque refus et chaque usage d'exception est journalisé dans ~/.siege/journal-garde.jsonl (lu par le Siège).
 // En cas d'erreur interne, la garde REFUSE (jamais d'ouverture par défaut).
 'use strict';
@@ -36,6 +37,19 @@ function mission(garde, h) {
   }
   return r;
 }
+// Sessions désignées mainteneur par le CEO en tapant « t'es une session maintainer » dans Claude Code
+// (~/.siege/sessions-mainteneur.json, hors de portée des agents). Seul un message tapé par l'utilisateur, en entier,
+// dans une session interactive du Siège désigne la session ; jamais un sous-agent ni une session lancée par le Siège.
+const PHRASE_MAINTENEUR = /^\s*(t['’]?\s?es|tu es)\s+(une\s+)?session\s+(maintainer|mainteneur)\s*[.!]*\s*$/i;
+function fichierMainteneurs() { return path.join(process.env.SIEGE_PRIVE || path.join(os.homedir(), '.siege'), 'sessions-mainteneur.json'); }
+function sessionsMainteneur() { try { return JSON.parse(fs.readFileSync(fichierMainteneurs(), 'utf8')); } catch { return {}; } }
+function designerMainteneur(id) {
+  const l = sessionsMainteneur(), limite = Date.now() - 30 * 864e5;
+  for (const [k, v] of Object.entries(l)) if (Date.parse(v) < limite) delete l[k];
+  l[id] = new Date().toISOString();
+  const f = fichierMainteneurs(); fs.mkdirSync(path.dirname(f), { recursive: true, mode: 0o700 });
+  const t = f + '.' + process.pid + '.tmp'; fs.writeFileSync(t, JSON.stringify(l, null, 1), { mode: 0o600 }); fs.renameSync(t, f);
+}
 function bloquer(message) { process.stderr.write(message + '\n'); process.exit(2); }
 
 let brut = '';
@@ -45,7 +59,24 @@ process.stdin.on('end', () => {
   // Rôle : celui du sous-agent ; sinon, pour un agent Copilot lancé par node siege/agent.js, SIEGE_ROLE (posé par l'outil,
   // hors de portée de l'agent) ; sinon le directeur
   // « mainteneur » ne vient que de siege/mainteneur.sh (environnement) : un sous-agent qui porterait ce nom n'en a aucun droit
-  const role = h.agent_type ? (h.agent_type === 'mainteneur' ? 'sous-agent-mainteneur-refuse' : h.agent_type) : (process.env.SIEGE_ROLE || 'directeur');
+  if (h.hook_event_name === 'UserPromptSubmit') {
+    if (!h.agent_type && !process.env.SIEGE_SESSION_AUTO && h.session_id && PHRASE_MAINTENEUR.test(String(h.prompt || ''))) {
+      try { designerMainteneur(h.session_id); } catch (e) { return bloquer('Garde : impossible de désigner la session mainteneur (' + e.message + ').'); }
+      journal({ evenement: 'session_mainteneur_designee', role: 'CEO', session: h.session_id });
+      let regle = ''; try { regle = fs.readFileSync(path.join(RACINE, 'process', 'mainteneur.md'), 'utf8'); } catch {}
+      process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext:
+        'Le CEO vient de désigner cette session comme session mainteneur. La garde du Siège ne la restreint plus. Applique désormais cette règle à la place de CLAUDE.md :\n\n' + regle } }));
+    }
+    return process.exit(0);
+  }
+  const mainteneur = !h.agent_type && (process.env.SIEGE_ROLE === 'mainteneur' || (h.session_id && h.session_id in sessionsMainteneur()));
+  const role = h.agent_type ? (h.agent_type === 'mainteneur' ? 'sous-agent-mainteneur-refuse' : h.agent_type) : (mainteneur ? 'mainteneur' : (process.env.SIEGE_ROLE || 'directeur'));
+  // Session mainteneur : aucune demande de permission non plus
+  if (role === 'mainteneur' && h.hook_event_name === 'PreToolUse') {
+    journal({ evenement: 'action_mainteneur', role, outil: h.tool_name, detail: String((h.tool_input || {}).command || (h.tool_input || {}).file_path || '').slice(0, 300) });
+    process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'Session mainteneur' } }));
+    return process.exit(0);
+  }
   try {
     const ex = require('./lib/exceptions');
     if (h.hook_event_name === 'SubagentStop') {

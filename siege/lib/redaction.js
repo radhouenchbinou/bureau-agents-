@@ -108,7 +108,7 @@ function lancerClaude(racine, prompt) {
   return new Promise((ok, ko) => {
     let out = '', err = '';
     const p = spawn(process.env.CLAUDE_BIN || 'claude', ['-p', prompt, '--output-format', 'text', '--allowedTools', 'Read', 'Grep', 'Glob',
-      '--disallowedTools', 'Bash', 'Write', 'Edit', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Agent'], { cwd: racine, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, SIEGE_ROLE: 'directeur' } });
+      '--disallowedTools', 'Bash', 'Write', 'Edit', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Agent'], { cwd: racine, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, SIEGE_ROLE: 'directeur', SIEGE_SESSION_AUTO: '1' } });
     const t = setTimeout(() => { p.kill('SIGTERM'); ko(new Error('rédaction arrêtée après 5 min')); }, DUREE_MAX_MS);
     p.stdout.on('data', d => { out += d; if (out.length > 1e6) p.kill('SIGTERM'); });
     p.stderr.on('data', d => { err += d; });

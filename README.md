@@ -434,6 +434,15 @@ Pour faire évoluer le Siège lui-même (code, agents, droits, règles, document
 **mainteneur** : `bash siege/mainteneur.sh` (ou `bash siege/mainteneur.sh "première demande"`). Règle :
 [process/mainteneur.md](process/mainteneur.md).
 
+Autre façon, dans une session Claude Code déjà ouverte à la racine du Siège : tapez **« t'es une session
+maintainer »** (ou « tu es une session mainteneur »), seul dans le message. Le hook `UserPromptSubmit` de la garde
+désigne alors cette session (`~/.siege/sessions-mainteneur.json`, 30 jours) et lui donne la règle du mainteneur :
+la garde laisse passer toutes ses actions, sans demande de permission. Limites de ce mode : le bac à sable de Claude
+Code et l'interdiction de lire les secrets, fixés au démarrage, restent en place jusqu'à la fin de la session (pour
+les lever aussi, utilisez `siege/mainteneur.sh`). Ses sous-agents gardent les droits de leur rôle. La phrase ne
+désigne rien si elle est noyée dans un texte, tapée dans un sous-agent ou envoyée par une session que le Siège lance
+lui-même (demandes, rédaction de tickets, agents Copilot).
+
 - **Aucune restriction** : les réglages du projet ne sont pas chargés (ni garde, ni bac à sable, ni interdictions),
   et les demandes de permission sont désactivées (`--dangerously-skip-permissions`).
 - **Aucune obligation fonctionnelle** : ni rôle de directeur, ni circuit, ni portes, ni délégation ; il répond
