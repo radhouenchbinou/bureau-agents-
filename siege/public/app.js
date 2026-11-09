@@ -2,7 +2,7 @@
 // Tout texte venu des données est inséré comme texte (jamais d'innerHTML avec des données).
 'use strict';
 (() => {
-  let E = null, vue = 'bureau', coll = 'features', filtre = { filiale: '', q: '' }, tiroirOuvert = false, glisse = null;
+  let E = null, vue = 'bureau', coll = 'features', filtre = { filiale: '', q: '' }, tiroirOuvert = false, glisse = null, vue25d = preferenceVue25d();
   const $ = s => document.querySelector(s);
 
   function h(tag, p, ...enfants) {
@@ -99,6 +99,14 @@
   function etage(cl, titre, info, postes) {
     return h('div', { class: 'etage ' + cl }, h('div', { class: 'etage-h' }, h('h2', { text: titre }), h('small', { text: info })), h('div', { class: 'postes' }, postes));
   }
+  // Vue 2.5D (EIA-018) : la même disposition, inclinée en perspective par CSS (aucune bibliothèque). Préférence gardée
+  // dans le navigateur ; si le stockage est indisponible, la vue standard reste affichée.
+  function preferenceVue25d() { try { return localStorage.getItem('siege.vue25d') === '1'; } catch (e) { return false; } }
+  function basculer25d() {
+    vue25d = !vue25d;
+    try { localStorage.setItem('siege.vue25d', vue25d ? '1' : '0'); } catch (e) { /* préférence non gardée */ }
+    rendreBureau();
+  }
   function rendreBureau() {
     const ag = E.agents, groupe = ag.filter(a => a.portee === 'groupe'), roles = E.rolesFiliale.filter(r => ag.some(a => a.nom === r));
     const d = E.activite.direction, q = E.questions.liste.length;
@@ -106,7 +114,9 @@
     const fils = E.filiales.filter(f => f.prefixe !== 'GRP');
     vider($('#v-bureau'),
       h('p', { class: 'aide', text: 'Les agents s\'allument quand Claude Code travaille dans le Siège. Cliquez un poste pour voir sa fiche.' }),
-      h('div', { class: 'immeuble' },
+      h('div', { class: 'bureau-barre' },
+        h('button', { type: 'button', class: 'btn petit', 'aria-pressed': String(vue25d), onclick: basculer25d, text: vue25d ? 'Vue standard' : 'Vue 2.5D' })),
+      h('div', { class: 'immeuble' + (vue25d ? ' vue25d' : '') },
         etage('direction', 'Direction', '', [
           poste('CEO', 'Vous — CEO', null, () => $(`.tabs [data-v=${enAttente().length ? 'droits' : 'backlog'}]`).click(),
             [q ? q + ' question(s)' : '', enAttente().length ? enAttente().length + ' exception(s)' : ''].filter(Boolean).join(' · ') || 'Rien en attente'),
