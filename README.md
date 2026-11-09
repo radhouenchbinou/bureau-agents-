@@ -265,6 +265,12 @@ Trois niveaux de protection :
 1. **La garde** (`siege/garde.js`, hook `PreToolUse` de Claude Code) contrôle chaque action de chaque agent
    avant exécution, avec son rôle. Tout ce qui n'est pas listé est refusé. Personne n'écrit dans `droits/`,
    `.claude/`, `siege/`, les fichiers du backlog, les `CLAUDE.md` ; personne ne lit les secrets.
+   Commandes de travail permises : la **lecture** pour tous les rôles (`cat`, `head`, `ls`, `find`, `grep`, `diff`,
+   `jq`… liste `lecture_shell` de `droits/roles.json`, sans option qui écrit ou exécute, jamais sur un secret, motifs
+   entre guillemets) ; les **fichiers** (`mkdir`, `cp`, `mv`, `rm`…) là où le rôle peut écrire ; les **outils de
+   build et de test** (npm, npx, mvn, gradle, python, pytest, go, cargo, make…) pour les devs, le QA et le devops.
+   Restent refusés : le réseau direct (`curl`, `ssh`…), `git push` (passer par `siege/github.js`), le code en
+   ligne (`node -e`, `python -c`), les redirections et les outils du Siège hors des règles qui les nomment.
 2. **Le bac à sable** de Claude Code (`sandbox` dans `.claude/settings.json`) isole au niveau du système
    chaque commande shell et ses sous-processus : réseau limité à **GitHub et Notion**, dossiers protégés
    en écriture, secrets illisibles. Sur Linux il faut `bubblewrap` et `socat` (`sudo apt install

@@ -51,7 +51,51 @@
       "backlog-siege",
       "demander-une-exception",
       "passation"
-    ]
+    ],
+    "lecture_shell": [
+      "cat",
+      "head",
+      "tail",
+      "less",
+      "more",
+      "wc",
+      "ls",
+      "tree",
+      "file",
+      "stat",
+      "du",
+      "df",
+      "find",
+      "grep",
+      "egrep",
+      "fgrep",
+      "rg",
+      "diff",
+      "cmp",
+      "sort",
+      "uniq",
+      "cut",
+      "tr",
+      "column",
+      "nl",
+      "jq",
+      "which",
+      "type",
+      "pwd",
+      "echo",
+      "printf",
+      "date",
+      "basename",
+      "dirname",
+      "realpath",
+      "readlink",
+      "md5sum",
+      "shasum",
+      "sha256sum",
+      "uname",
+      "whoami"
+    ],
+    "_lecture_shell": "Commandes de lecture permises à tous les rôles (options qui écrivent ou exécutent refusées, jamais sur un secret). mkdir, touch, cp, mv, rm, rmdir, chmod, ln : permises là où le rôle peut écrire."
   },
   "roles": {
     "directeur": {
@@ -90,7 +134,8 @@
       ],
       "bash": [
         "^node siege/backlog\\.js maj [A-Z]{3}-\\d{3}\\b",
-        "^node siege/backlog\\.js creer feature\\b"
+        "^node siege/backlog\\.js creer feature\\b",
+        "^cd projets/\\S+$"
       ],
       "web": [],
       "github": {},
@@ -110,7 +155,9 @@
         "portfolio/interfaces.md",
         "portfolio/decisions/**"
       ],
-      "bash": [],
+      "bash": [
+        "^cd projets/\\S+$"
+      ],
       "web": [],
       "github": {
         "contents": "read"
@@ -140,7 +187,11 @@
         "^(mkdir|touch) projets/\\S+",
         "^cd projets/\\S+$",
         "^node siege/backlog\\.js maj BUG-\\d{3} --statut (\"?En correction\"?|\"?À vérifier\"?)\\b",
-        "^node siege/github\\.js (pousser|pr) .*--role {role}( |$)"
+        "^node siege/github\\.js (pousser|pr) .*--role {role}( |$)",
+        "^(npm|npx|pnpm|yarn|node|tsc)( |$)",
+        "^(mvn|\\./mvnw|gradle|\\./gradlew)( |$)",
+        "^(python3?|pip3?|pytest|poetry|uv|ruff|mypy)( |$)",
+        "^(go|cargo|make|dotnet)( |$)"
       ],
       "web": [],
       "github": {
@@ -171,7 +222,10 @@
         "^(mkdir|touch) projets/\\S+",
         "^cd projets/\\S+$",
         "^node siege/backlog\\.js maj BUG-\\d{3} --statut (\"?En correction\"?|\"?À vérifier\"?)\\b",
-        "^node siege/github\\.js (pousser|pr) .*--role {role}( |$)"
+        "^node siege/github\\.js (pousser|pr) .*--role {role}( |$)",
+        "^(npm|npx|pnpm|yarn|node|tsc|ng)( |$)",
+        "^(python3?|pip3?)( |$)",
+        "^make( |$)"
       ],
       "web": [],
       "github": {
@@ -205,7 +259,12 @@
         "^node --test\\b",
         "^cd projets/\\S+$",
         "^node siege/backlog\\.js creer bug\\b",
-        "^node siege/backlog\\.js maj BUG-\\d{3}\\b"
+        "^node siege/backlog\\.js maj BUG-\\d{3}\\b",
+        "^(npm|npx|pnpm|yarn|node)( |$)",
+        "^(mvn|\\./mvnw|gradle|\\./gradlew)( |$)",
+        "^(python3?|pip3?|pytest)( |$)",
+        "^(go|cargo|make|dotnet) (test|vet|build)( |$)",
+        "^npx playwright( |$)"
       ],
       "web": [],
       "github": {
@@ -228,7 +287,8 @@
         "portfolio/decisions/*-review.md"
       ],
       "bash": [
-        "^node siege/github\\.js statut .*--contexte revue .*--role {role}( |$)"
+        "^node siege/github\\.js statut .*--contexte revue .*--role {role}( |$)",
+        "^cd projets/\\S+$"
       ],
       "web": [],
       "github": {
@@ -253,7 +313,10 @@
       "bash": [
         "^(pip-audit|npm audit|gitleaks detect|semgrep|bandit)\\b",
         "^python3? -m (pip_audit|bandit)\\b",
-        "^node siege/github\\.js statut .*--contexte securite .*--role {role}( |$)"
+        "^node siege/github\\.js statut .*--contexte securite .*--role {role}( |$)",
+        "^(npm audit|npx --yes? ?(audit-ci|osv-scanner))( |$)",
+        "^(osv-scanner|trivy (fs|config)|grype|syft)( |$)",
+        "^cd projets/\\S+$"
       ],
       "web": [],
       "github": {
@@ -287,7 +350,14 @@
         "^git( -C \\S+)? (add|commit|checkout|switch)( |$)",
         "^docker (build|compose config)\\b",
         "^systemd-analyze verify\\b",
-        "^node siege/github\\.js (pousser|pr|fusionner) .*--role {role}( |$)"
+        "^node siege/github\\.js (pousser|pr|fusionner) .*--role {role}( |$)",
+        "^(npm|npx|pnpm|yarn|node)( |$)",
+        "^(mvn|\\./mvnw|gradle|\\./gradlew)( |$)",
+        "^(python3?|pip3?)( |$)",
+        "^make( |$)",
+        "^docker (build|compose (config|build)|image (ls|inspect)|run --rm)( |$)",
+        "^(shellcheck|hadolint|actionlint|yamllint)( |$)",
+        "^cd projets/\\S+$"
       ],
       "web": [],
       "github": {
@@ -312,7 +382,9 @@
       "ecriture": [
         "projets/**/docs/site/**"
       ],
-      "bash": [],
+      "bash": [
+        "^cd projets/\\S+$"
+      ],
       "web": [],
       "github": {
         "contents": "read"

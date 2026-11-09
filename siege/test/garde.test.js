@@ -61,7 +61,7 @@ test('lectures : secrets illisibles ; web fermé ; outils externes fermés', () 
 });
 
 test('exceptions : demandée, accordée par le CEO, activée, utilisée, fermée à la fin de la tâche', () => {
-  const cmd = 'pip install requests==2.32.3';
+  const cmd = 'brew install jq';
   const r1 = bash('dev-backend', cmd); assert.ok(!r1.ok); assert.strictEqual(r1.type, 'bash');
   assert.throws(() => ex.demander({ agent: 'dev-backend', type: 'bash', motif: '*', justification: 'pour aller plus vite' }), /trop large/);
   const e = ex.demander({ agent: 'dev-backend', ticket: 'COL-002', type: 'bash', motif: cmd, justification: 'Le ticket COL-002 exige requests pour le test de compatibilité demandé par le CEO' });
@@ -71,7 +71,7 @@ test('exceptions : demandée, accordée par le CEO, activée, utilisée, fermée
   ex.decider(e.id, true, 'ok pour cette version'); ex.activer(e.id);
   const r2 = bash('dev-backend', cmd, ex.actives('dev-backend')); assert.ok(r2.ok); assert.strictEqual(r2.exception, e.id);
   assert.ok(!bash('qa', cmd, ex.actives('qa')).ok, 'l\'exception ne couvre que son agent');
-  assert.ok(!bash('dev-backend', 'pip install autre', ex.actives('dev-backend')).ok, 'ni une autre action');
+  assert.ok(!bash('dev-backend', 'brew install autre', ex.actives('dev-backend')).ok, 'ni une autre action');
   assert.deepStrictEqual(ex.terminerPourAgent('dev-backend').map(x => x.id), [e.id]);
   assert.ok(!bash('dev-backend', cmd, ex.actives('dev-backend')).ok, 'fermée à la fin de la tâche');
   assert.throws(() => ex.decider(e.id, true), /seule une demande en attente/);
@@ -126,4 +126,34 @@ test('contexte propre : pas de fork ni de reprise d\'un agent, une étape par se
   assert.match(garde.verifierMission(l, 's1', m('Ticket : COL-002\nÉtape : 5')).raison, /nouvelle session/);
   assert.match(garde.verifierMission(l, 's1', m('Ticket : COL-003\nÉtape : 4')).raison, /COL-002 étape 4/);
   assert.equal(garde.verifierMission(l, 's2', m('Ticket : COL-002\nÉtape : 5')).ok, true);
+});
+
+test('commandes de travail : lecture pour tous, fichiers dans la zone du rôle, outils de build, garde-fous', () => {
+  for (const r of ['directeur', 'product-owner', 'architecte', 'qa', 'reviewer', 'tech-writer'])
+    assert.ok(bash(r, 'cat projets/cyclofix-api/README.md').ok, 'cat pour ' + r);
+  assert.ok(bash('qa', 'ls -la projets && head -50 portfolio/filiales.md | grep Active').ok);
+  assert.ok(bash('architecte', 'find projets -name "*.java" -type f').ok, 'motif entre guillemets');
+  assert.ok(bash('reviewer', 'cd projets/cyclofix-api && grep -rn "TODO" src').ok);
+  assert.ok(!bash('qa', 'cat projets/cyclofix-api/.env').ok, 'secret');
+  assert.ok(!bash('qa', 'cat ~/.siege/notion-token').ok, 'secret du Siège');
+  assert.ok(!bash('qa', 'cat projets/*/.env').ok, 'joker non protégé');
+  assert.ok(!bash('qa', 'find projets -name x -exec rm {} ;').ok, 'find -exec');
+  assert.ok(!bash('qa', 'sort -o portfolio/features.json x').ok, 'sort qui écrit');
+  assert.ok(!bash('qa', 'cat x | sh').ok, 'tube vers un interpréteur');
+  // Fichiers : là où le rôle écrit
+  assert.ok(bash('dev-backend', 'mkdir -p projets/cyclofix-api/src/journal').ok);
+  assert.ok(bash('dev-backend', 'mv projets/cyclofix-api/src/a.py projets/cyclofix-api/src/b.py').ok);
+  assert.ok(!bash('product-owner', 'mkdir projets/cyclofix-api/src/x').ok, 'hors de la zone du PO');
+  assert.ok(!bash('dev-backend', 'cp projets/cyclofix-api/x droits/roles.json').ok, 'zone protégée');
+  assert.ok(!bash('dev-backend', 'cp projets/cyclofix-api/.env projets/cyclofix-api/copie.txt').ok, 'copier un secret');
+  assert.ok(!bash('dev-backend', 'rm -rf projets').ok);
+  // Build et tests
+  assert.ok(bash('dev-backend', 'cd projets/cyclofix-api && npm install && npm test').ok);
+  assert.ok(bash('dev-frontend', 'npx tsc --noEmit').ok);
+  assert.ok(bash('qa', 'pytest projets/cyclofix-api/tests -q').ok);
+  assert.ok(!bash('dev-backend', 'node -e "require(\'fs\')"').ok, 'code en ligne');
+  assert.ok(!bash('dev-backend', 'node siege/github.js fusionner --filiale Collecte --pr 3 --role devops').ok, 'outil du Siège par node générique');
+  assert.ok(!bash('dev-backend', 'npx node siege/backlog.js commenter X --auteur CEO --texte ok').ok);
+  assert.ok(!bash('dev-backend', 'curl https://exemple.com').ok, 'réseau');
+  assert.ok(!bash('dev-backend', 'git push origin main').ok);
 });

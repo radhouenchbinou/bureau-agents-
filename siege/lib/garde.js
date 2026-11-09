@@ -13,9 +13,9 @@ const ENV_INTERDITES = /^(PATH|LD_\w+|DYLD_\w+|NODE_OPTIONS|NODE_PATH|PYTHONPATH
 // ---------- Découpage d'une commande shell (sans l'exécuter) ----------
 // Renvoie { segments: [{ mots, tube }], refus } ; refuse substitutions, redirections et fonds de tâche.
 function decouper(cmd) {
-  const segs = []; let mots = [], mot = null, q = null, tube = false;
+  const segs = []; let mots = [], mot = null, q = null, tube = false, joker = false;
   const fin = () => { if (mot !== null) { mots.push(mot); mot = null; } };
-  const coupe = estTube => { fin(); if (!mots.length) return 'Commande vide autour d\'un séparateur'; segs.push({ mots, tube }); mots = []; tube = estTube; return null; };
+  const coupe = estTube => { fin(); if (!mots.length) return 'Commande vide autour d\'un séparateur'; segs.push({ mots, tube, joker }); mots = []; tube = estTube; joker = false; return null; };
   for (let i = 0; i < cmd.length; i++) {
     const c = cmd[i], n = cmd[i + 1];
     if (q === "'") { if (c === "'") q = null; else mot += c; continue; }
@@ -36,10 +36,11 @@ function decouper(cmd) {
     if (c === '&') return { refus: 'Exécution en arrière-plan interdite' };
     if (c === '>' || c === '<') return { refus: 'Redirection interdite : utilisez les outils d\'écriture' };
     if (/\s/.test(c)) { fin(); continue; }
+    if (c === '*' || c === '?' || c === '[' || (c === '~' && mot === null && n !== undefined && n !== '/' && !/\s/.test(n))) joker = true;   // développés par le shell
     mot = (mot || '') + c;
   }
   if (q) return { refus: 'Guillemet non fermé' };
-  fin(); if (mots.length) segs.push({ mots, tube }); else if (segs.length) return { refus: 'Commande vide en fin de ligne' };
+  fin(); if (mots.length) segs.push({ mots, tube, joker }); else if (segs.length) return { refus: 'Commande vide en fin de ligne' };
   return { segments: segs };
 }
 
@@ -66,6 +67,45 @@ function correspond(absolu, motif, racine) {
 }
 const reel = p => { try { return fs.realpathSync(p); } catch { const d = path.dirname(p); return d === p ? p : path.join(reel(d), path.basename(p)); } };
 
+// ---------- Commandes de lecture et de fichiers (tous les rôles) ----------
+// Lecture : permises à tous, sauf options qui écrivent ou exécutent, et jamais sur un secret (lecture_interdite).
+// Fichiers (mkdir, cp, mv, rm…) : permises là où le rôle peut écrire (mêmes règles que l'outil Write).
+const OPTIONS_INTERDITES = {
+  find: /^-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$/,
+  sort: /^(-o.*|--output(=.*)?)$/,
+  tree: /^-o$/,
+  rg: /^--pre(=.*)?$/
+};
+const CMD_FICHIERS = new Set(['mkdir', 'touch', 'cp', 'mv', 'rm', 'rmdir', 'chmod', 'ln']);
+const estChemin = m => !m.startsWith('-') && (/[\/~.]/.test(m) || fs.existsSync(m));
+const absolu = (racine, m, cwd) => reel(m === '~' ? os.homedir() : m.startsWith('~/') ? path.join(os.homedir(), m.slice(2)) : path.resolve(cwd || racine, m));
+function verifierLecture(R, racine, mots, cwd) {
+  const opt = OPTIONS_INTERDITES[mots[0]];
+  for (const m of mots.slice(1)) {
+    if (opt && opt.test(m)) return `Option interdite pour ${mots[0]} : ${m} (lecture seule)`;
+    if (!estChemin(m)) continue;
+    const abs = absolu(racine, m, cwd);
+    if (R.lectureInterdite.some(x => correspond(abs, x, racine))) return `Lecture interdite (secret ou identifiant) : ${m}`;
+  }
+  return null;
+}
+function verifierFichiers(R, racine, mots, cwd) {
+  const cmd = mots[0], args = mots.slice(1).filter(m => !m.startsWith('-'));
+  if (!args.length) return `${cmd} sans chemin`;
+  const recursif = mots.slice(1).some(m => /^-[a-zA-Z]*[rR]/.test(m) || m === '--recursive');
+  // cp et ln : les sources sont lues, la destination écrite ; mv : sources et destination changent
+  const ecrits = cmd === 'cp' || cmd === 'ln' ? args.slice(-1) : args, lus = cmd === 'cp' || cmd === 'ln' ? args.slice(0, -1) : [];
+  for (const m of lus) { const abs = absolu(racine, m, cwd); if (R.lectureInterdite.some(x => correspond(abs, x, racine))) return `Lecture interdite (secret ou identifiant) : ${m}`; }
+  for (const m of ecrits) {
+    const abs = absolu(racine, m, cwd), rel = path.relative(racine, abs);
+    if (R.ecritureInterdite.some(x => correspond(abs, x, racine))) return `Écriture interdite à tous les agents : ${rel} (zone protégée)`;
+    if (!R.ecriture.some(x => correspond(abs, x, racine) || correspond(path.join(abs, '_'), x, racine))) return `${R.role} n'écrit pas dans ${rel} (autorisé : ${R.ecriture.join(', ') || 'rien'})`;
+    if ((cmd === 'rm' || cmd === 'rmdir' || cmd === 'mv') && fs.existsSync(path.join(abs, '.git'))) return `${cmd} d'un dépôt git entier interdit : ${rel}`;
+    if (cmd === 'rm' && recursif && (rel === '' || rel === 'projets')) return 'Suppression récursive de la racine ou de projets/ interdite';
+  }
+  return null;
+}
+
 // ---------- Politique ----------
 // Politique = droits/roles.json + règles permanentes accordées par le CEO (droits/autorisations.json)
 function charger(racine) {
@@ -81,7 +121,8 @@ function regles(politique, role) {
   return {
     role, outils: new Set([...c.outils_toujours, ...r.outils]),
     lectureInterdite: c.lecture_interdite, ecritureInterdite: c.ecriture_interdite, ecriture: r.ecriture,
-    bash: [...c.bash, ...r.bash].map(s => new RegExp(remplace(s))), tubes: new Set(c.tubes), web: r.web || []
+    bash: [...c.bash, ...r.bash].map(s => new RegExp(remplace(s))), tubes: new Set(c.tubes), web: r.web || [],
+    lecture: new Set(c.lecture_shell || [])
   };
 }
 
@@ -133,6 +174,7 @@ function decider(politique, brut, { racine, role, exceptions = [] }) {
   if (outil === 'Bash') {
     const d = decouper(String(entree.command || ''));
     if (d.refus) return { ok: false, raison: d.refus };
+    let cwd = racine;
     for (const s of d.segments) {
       const mots = [...s.mots];
       while (mots.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(mots[0])) {
@@ -140,15 +182,31 @@ function decider(politique, brut, { racine, role, exceptions = [] }) {
       }
       if (!mots.length) continue;
       if (mots.some(m => /(^|\/)\.\.(\/|$)/.test(m))) return { ok: false, raison: 'Chemin avec « .. » interdit dans une commande' };
-      if (s.tube) { if (!R.tubes.has(mots[0])) return { ok: false, raison: `Après un tube, seuls ${[...R.tubes].join(', ')} sont permis` }; continue; }
-      if (mots[0] === 'cd') {
-        const abs = reel(path.resolve(racine, mots[1] || '.')), rel = path.relative(racine, abs);
-        if (rel.startsWith('..') || path.isAbsolute(rel)) return { ok: false, raison: 'cd hors du Siège interdit' };
+      if (s.tube) {
+        if (!R.tubes.has(mots[0]) && !(R.lecture.has(mots[0]) && mots[0] !== 'find')) return { ok: false, raison: `Après un tube, seules les commandes de lecture sont permises (${[...R.tubes].join(', ')}…)` };
+        const e = verifierLecture(R, racine, mots, cwd); if (e) return { ok: false, raison: e };
         continue;
+      }
+      if (mots[0] === 'cd') {
+        const abs = reel(path.resolve(cwd || racine, mots[1] || '.')), rel = path.relative(racine, abs);
+        if (rel.startsWith('..') || path.isAbsolute(rel)) return { ok: false, raison: 'cd hors du Siège interdit' };
+        cwd = abs; continue;
       }
       const texte = mots.join(' ');
       if (/^node siege\/exception\.js (accorder|refuser)\b/.test(texte)) return { ok: false, raison: 'Seul le CEO accorde ou refuse une exception (Siège › Exceptions)' };
-      if (!R.bash.some(re => re.test(texte))) return refus(`Commande non autorisée pour ${role} : ${texte.slice(0, 160)}`, 'bash', texte);
+      if (R.lecture.has(mots[0]) || CMD_FICHIERS.has(mots[0])) {
+        if (s.joker) return refus(`Joker non entre guillemets dans « ${texte.slice(0, 80)} » : utilisez l'outil Glob, ou mettez le motif entre guillemets pour find et grep`, 'bash', texte);
+        const e = R.lecture.has(mots[0]) ? verifierLecture(R, racine, mots, cwd) : verifierFichiers(R, racine, mots, cwd);
+        if (e) return refus(e, 'bash', texte);
+        continue;
+      }
+      // Code en ligne d'un interpréteur : refusé (le code exécuté doit être un fichier relu et versionné)
+      if (/^(python3?|node|ruby|perl|php|bash|sh|zsh|deno|bun)$/.test(mots[0]) && mots.slice(1).some(m => /^(-c|-e|-p|--eval|--print|-r|--require|--import)$/.test(m)))
+        return refus(`Code en ligne interdit (${mots[0]} ${mots.find(m => /^-/.test(m))}) : écrivez un fichier`, 'bash', texte);
+      // Les outils du Siège (siege/*.js) ne passent que par les règles qui les nomment, jamais par « node … » générique
+      const touche = mots.slice(1).some(m => !m.startsWith('-') && path.relative(path.join(racine, 'siege'), absolu(racine, m, cwd)).split(path.sep)[0] !== '..' && !path.isAbsolute(path.relative(path.join(racine, 'siege'), absolu(racine, m, cwd))));
+      const regles = touche ? R.bash.filter(re => /siege/.test(re.source)) : R.bash;
+      if (!regles.some(re => re.test(texte))) return refus(`Commande non autorisée pour ${role} : ${texte.slice(0, 160)}`, 'bash', texte);
     }
     return { ok: true };
   }
