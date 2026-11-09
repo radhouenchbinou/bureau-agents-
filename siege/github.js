@@ -17,7 +17,7 @@ const AIDE = `GitHub des agents — usage : node siege/github.js <commande> --ro
   etat                                                     configuration et repos déclarés
   pousser --role R --filiale F --branche feature/ID        pousse la branche (jamais main)
   pr --role R --filiale F --ticket ID --branche feature/ID --titre "…" [--corps "…"]   ouvre la PR vers main et l'inscrit sur le ticket
-  statut --role R --filiale F --pr N --contexte revue|securite --etat success|failure [--description "…"]
+  statut --role R --filiale F --pr N --sha <commit relu> --contexte revue|securite --etat success|failure [--description "…"]
   fusionner --role devops --filiale F --pr N               fusionne si le CEO a approuvé et revue + sécurité au vert
   fusionner --role devops --ticket PARENT                  livraison groupée : toutes les PR du lot, ou aucune
 `;
@@ -60,8 +60,11 @@ async function main(argv) {
     case 'statut': {
       if (CONTEXTE_DU_ROLE[role] !== o.contexte) throw new gh.ErreurGithub(`Le rôle ${role} ne pose pas le feu « ${o.contexte} »`);
       if (!['success', 'failure'].includes(o.etat)) throw new gh.ErreurGithub('--etat success ou failure');
+      // C6 : le feu porte sur le commit relu (--sha) ; refus si la tête de la PR a bougé depuis la revue
+      if (!/^[0-9a-f]{40}$/.test(o.sha || '')) throw new gh.ErreurGithub('--sha <commit relu> obligatoire (40 caractères hexadécimaux)');
       const p = await gh.appel('GET', `/repos/${repo}/pulls/${Number(o.pr)}`, jeton);
-      await gh.appel('POST', `/repos/${repo}/statuses/${p.head.sha}`, jeton, { state: o.etat, context: 'agents/' + o.contexte, description: String(o.description || role).slice(0, 140) });
+      if (p.head.sha !== o.sha) throw new gh.ErreurGithub(`La tête de la PR #${o.pr} a bougé (${p.head.sha} au lieu de ${o.sha}) : feu refusé, relecture nécessaire`);
+      await gh.appel('POST', `/repos/${repo}/statuses/${o.sha}`, jeton, { state: o.etat, context: 'agents/' + o.contexte, description: String(o.description || role).slice(0, 140) });
       return console.log(`Feu agents/${o.contexte} = ${o.etat} sur la PR #${o.pr}`);
     }
     case 'fusionner': {
