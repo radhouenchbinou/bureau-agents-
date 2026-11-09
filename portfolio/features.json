@@ -1,5 +1,268 @@
 {
   "version": 1,
   "collection": "features",
-  "elements": []
+  "elements": [
+    {
+      "id": "EIA-001",
+      "titre": "C2 · Identité imposée : options en double refusées, auteur et rôle fixés par la garde",
+      "rang": 1,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, C2.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-002",
+      "titre": "C1 · Fusion : approbateurs autorisés, approbation sur le dernier commit, check runs requis",
+      "rang": 2,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, C1.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-003",
+      "titre": "C6 · Feu de revue posé sur le commit relu",
+      "rang": 3,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, C6.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-004",
+      "titre": "C3 · Backlog local : verrou inter-processus et identifiants réservés",
+      "rang": 4,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, C3.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-005",
+      "titre": "C4 · Transitions contrôlées du workflow générique (acteur, conditions, preuves, version)",
+      "rang": 5,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "EIA-001"
+      ],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, C4 et section Workflow générique.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-006",
+      "titre": "N18 · Profils de stack et types d'agents configurables (Java, Node, Python préconfigurés)",
+      "rang": 6,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, N18.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-007",
+      "titre": "N1 · Exécutions persistantes (file, délai, reprise, anti-doublon, escalade)",
+      "rang": 7,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, N1.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-008",
+      "titre": "N2 · Isolation par conteneur pour chaque exécution",
+      "rang": 8,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "EIA-006",
+        "EIA-007"
+      ],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, N2.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-009",
+      "titre": "C7 · Aucune exécution sans isolation",
+      "rang": 9,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "EIA-008"
+      ],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, C7.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-010",
+      "titre": "C5 · Exceptions liées à l'exécution, pas au rôle",
+      "rang": 10,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "EIA-007"
+      ],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, C5.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-011",
+      "titre": "N3 · Classe de risque calculée et portes configurables",
+      "rang": 11,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "EIA-005"
+      ],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, N3 et section Portes par classe de risque.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-012",
+      "titre": "N4 · Approbations liées à la version approuvée",
+      "rang": 12,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "EIA-001",
+        "EIA-005"
+      ],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, N4.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-013",
+      "titre": "N5 · Pont de déploiement à adaptateurs (staging, production, vérification)",
+      "rang": 13,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "EIA-002"
+      ],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, N5.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-014",
+      "titre": "N6 · Mesure des coûts et budgets paramétrables (global, ticket, exécution)",
+      "rang": 14,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "EIA-007"
+      ],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, N6.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-015",
+      "titre": "N7 · Données sensibles tenues hors des agents",
+      "rang": 15,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "EIA-008"
+      ],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, N7.",
+      "agent": ""
+    },
+    {
+      "id": "EIA-016",
+      "titre": "N13 · Synchronisation à sens unique vers Jira, Notion ou GitHub Issues",
+      "rang": 16,
+      "filiale": "Entreprise IA",
+      "jalon": "P0",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "EIA-005"
+      ],
+      "parent": "",
+      "pr": "",
+      "description": "Voir projets/entreprise-ia/siege/docs/backlog/conception-validee.md, feuille de route, N13.",
+      "agent": ""
+    }
+  ]
 }
