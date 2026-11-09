@@ -13,6 +13,6 @@ description: Travailler sur une branche feature/<ID> ou fix/<BUG-ID>, faire des 
 - Pousser et ouvrir la PR uniquement par l'outil du Siège (jamais `git push` direct) :
   ```
   node siege/github.js pousser --role <ton-nom> --filiale <Nom> --branche feature/<ID>-<slug>
-  node siege/github.js pr --role <ton-nom> --filiale <Nom> --branche feature/<ID>-<slug> --titre "<ID> : …" --corps "…"
+  node siege/github.js pr --role <ton-nom> --filiale <Nom> --ticket <ID> --branche feature/<ID>-<slug> --titre "<ID> : …" --corps "…"
   ```
 - Corps de PR : lien vers la spec, résumé, comment tester, risques. La fusion n'est jamais de ton ressort.

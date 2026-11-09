@@ -21,6 +21,10 @@ const COLLECTIONS = {
       priorite: { type: 'choix', libelle: 'Priorité', options: ['Haute', 'Moyenne', 'Basse'], defaut: 'Moyenne' },
       etape: { type: 'choix', libelle: 'Étape', options: ETAPES },
       dependances: { type: 'liste', libelle: 'Dépend de', format: ID_FEATURE },
+      // Feature sur plusieurs filiales : un ticket parent (souvent GRP) et un ticket enfant par filiale, livrés ensemble
+      parent: { type: 'texte', libelle: 'Parent', max: 7, format: ID_FEATURE },
+      // Pull request du ticket (« owner/repo#12 ») : tenue par siege/github.js seulement
+      pr: { type: 'texte', libelle: 'PR', max: 160, auto: true, format: /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}#\d{1,7}$/ },
       description: { type: 'texte', libelle: 'Description', max: 4000 },
       agent: { type: 'texte', libelle: 'Agent', max: 60 }
     },

@@ -237,6 +237,19 @@ Le circuit sur GitHub : le dev pousse `feature/<ID>` et ouvre la PR ; le reviewe
 feux ; **vous approuvez la PR** ; le devops fusionne (`node siege/github.js fusionner`), l'outil refusant
 s'il manque votre approbation ou un feu vert.
 
+## Plusieurs repos : un repo par filiale, une livraison groupée
+
+Chaque filiale a son repo (colonne « Repo git » de `portfolio/filiales.md`, repo GitHub dans `portfolio/github.json`),
+et chaque jeton d'agent est limité au repo de la filiale de sa mission. Un produit en back et front = deux filiales.
+
+Une feature qui touche plusieurs filiales devient **un ticket parent et un ticket enfant par filiale** (champ
+`Parent`). Chaque PR est inscrite sur son ticket (champ `PR`, tenu par `github.js pr --ticket`, en lecture seule dans
+le Siège). La fusion se fait **en une fois sur le parent** : `github.js fusionner --role devops --ticket <PARENT>`
+vérifie toutes les PR (approbation du CEO, revue, sécurité, pas de conflit) et ne fusionne rien s'il en manque une ;
+sinon il fusionne le producteur avant ses consommateurs. Une PR d'un lot ne se fusionne jamais seule. Si GitHub refuse
+une fusion au milieu du lot, le parent passe « Bloqué » avec l'état exact, pour décision du CEO. Une base Notion
+existante reçoit d'elle-même les propriétés « Parent » et « PR » à la première écriture.
+
 ## Le circuit d'une feature
 
 | # | Étape | Agent | Livrable |

@@ -27,7 +27,7 @@ Lecture
   liste [features|bugs] [--filiale X] [--statut Y]
   voir <ID>                             un ticket en détail (feature ABC-001 ou bug BUG-001)
 
-Écriture (champs : --titre --rang --filiale --jalon --statut --priorite --etape --dependances --description --agent
+Écriture (champs : --titre --rang --filiale --jalon --statut --priorite --etape --dependances --parent --description --agent
           bugs : --story --gravite --reproduction --attendu --obtenu --detecte-par --corrige-par)
   creer feature --filiale <Nom> --titre "…" [champs]     identifiant attribué automatiquement
   creer bug --filiale <Nom> --story ABC-001 --titre "…" --gravite Bloquant|Majeur|Mineur [champs]
@@ -64,6 +64,7 @@ async function prefixeDe(nom) {
 
 async function main(argv) {
   const [cmd, ...args] = argv, { o, reste } = options(args);
+  if ('pr' in o) throw new ErreurBacklog('Le champ PR est tenu par node siege/github.js pr --ticket <ID> (jamais à la main)');
   switch (cmd) {
     case undefined: case 'aide': case '--help': console.log(AIDE); return;
     case 'source': {
@@ -92,7 +93,11 @@ async function main(argv) {
     case 'voir': {
       const id = reste[0], n = collectionDe(id), e = (await cfg.source(n).lister()).find(x => x.id === id);
       if (!e) throw new ErreurBacklog('Ticket introuvable : ' + id);
-      if (n === 'features') e.prete = prete(e, await cfg.source('features').lister());
+      if (n === 'features') {
+        const toutes = await cfg.source('features').lister(); e.prete = prete(e, toutes);
+        const enfants = toutes.filter(x => x.parent === e.id);
+        if (enfants.length) e.lot = enfants.map(x => ({ id: x.id, filiale: x.filiale, statut: x.statut, etape: x.etape || '', pr: x.pr || '' }));
+      }
       console.log(JSON.stringify(e, null, 2)); return;
     }
     case 'creer': {

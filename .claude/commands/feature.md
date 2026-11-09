@@ -17,6 +17,11 @@ fichiers, rien ne doit venir d'une session précédente.
 3. **Reprise** : le champ `etape` du ticket dit où l'on en est.
    - Ticket « À faire » sans étape → **étape 0, cadrage** : filiale(s), impact inter-filiales, circuit (complet, court
      ou Groupe), étapes retenues (commente-les sur le ticket). Demande validation.
+     Plusieurs filiales → propose le découpage : ce ticket devient le **parent**, un ticket enfant par filiale
+     (`creer feature --filiale <Nom> --parent <ID> --dependances <producteur>`) ; voir « Feature sur plusieurs
+     filiales » dans le workflow. Après validation, chaque enfant passe par `/feature <enfant>` (1 → 7).
+   - Ticket parent dont les enfants ne sont pas tous validés en 7 → donne leur avancement (`voir <ID>`, champ `lot`) et
+     termine ton tour. Tous validés en 7 → étape **8 · Livraison groupée** par le devops (`fusionner --ticket <ID>`).
    - Sinon → l'étape inscrite. Si le dernier commentaire est `Validé par le CEO · Étape suivante : <n>`, c'est l'étape <n>.
      Si l'étape est en cours avec une demande de correction du CEO, refais-la avec cette remarque.
 4. **L'étape de cette session** :

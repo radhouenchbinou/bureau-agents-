@@ -77,17 +77,20 @@ function lancer(commande) {
   return new Promise(ok => execFile('osascript', ['-e', script], { timeout: 10e3 }, err => ok({ lance: !err, commande: shell })));
 }
 
+// Champs tenus par les outils (ex. PR, par siege/github.js) : jamais modifiés depuis l'interface
+const sansAuto = (n, champs) => Object.fromEntries(Object.entries(champs).filter(([k]) => !(COLLECTIONS[n].champs[k] || {}).auto));
 async function action(op) {
   if (!op || typeof op.op !== 'string') refus('Opération manquante');
   const n = op.collection;
   switch (op.op) {
     case 'ticket.creer': {
+      if (!op.ticket || typeof op.ticket !== 'object') refus('Ticket manquant');
       if (!COLLECTIONS[n]) refus('Collection inconnue');
       const fil = (await filiales(cfg.F.filiales)).find(f => f.nom === op.ticket.filiale) || refus('Choisissez une filiale');
       const src = cfg.source(n), id = prochainId(n, await src.lister(), fil.prefixe);
-      return src.creer({ ...op.ticket, id });
+      return src.creer({ ...sansAuto(n, op.ticket), id });
     }
-    case 'ticket.modifier': if (!COLLECTIONS[n]) refus('Collection inconnue'); return cfg.source(n).modifier(op.id, op.champs || {});
+    case 'ticket.modifier': if (!COLLECTIONS[n]) refus('Collection inconnue'); return cfg.source(n).modifier(op.id, sansAuto(n, op.champs || {}));
     case 'ticket.supprimer': if (!COLLECTIONS[n]) refus('Collection inconnue'); return cfg.source(n).supprimer(op.id);
     case 'ticket.commenter': {
       if (!COLLECTIONS[n]) refus('Collection inconnue');

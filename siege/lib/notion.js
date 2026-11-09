@@ -78,7 +78,15 @@ class SourceNotion {
   constructor({ jeton, base, collection }) {
     if (!COLLECTIONS[collection]) throw new ErreurBacklog('Collection inconnue : ' + collection);
     if (!UUID.test(base || '')) throw new ErreurBacklog('Base Notion « ' + COLLECTIONS[collection].libelle + ' » non configurée');
-    this.client = new ClientNotion(jeton); this.base = base; this.collection = collection; this.type = 'notion'; this.cache = null; this.cacheA = 0;
+    this.client = new ClientNotion(jeton); this.base = base; this.collection = collection; this.type = 'notion'; this.cache = null; this.cacheA = 0; this.schemaOk = null;
+  }
+  // Une base créée avant l'ajout d'un champ (ex. Parent, PR) le reçoit à la première écriture ; rien n'est retiré
+  schemaAJour() {
+    return this.schemaOk || (this.schemaOk = (async () => {
+      const d = await this.client.appel('GET', `/databases/${this.base}`), existe = new Set(Object.keys(d.properties || {}));
+      const manque = Object.fromEntries(Object.entries(schema(this.collection)).filter(([k, v]) => !existe.has(k) && !v.title));
+      if (Object.keys(manque).length) await this.client.appel('PATCH', `/databases/${this.base}`, { properties: manque });
+    })().catch(e => { this.schemaOk = null; throw e; }));
   }
   async lister() {
     if (this.cache && Date.now() - this.cacheA < 10e3) return this.cache;
@@ -99,12 +107,14 @@ class SourceNotion {
   async page(id) { const p = await this.pages(id); if (!p.length) throw new ErreurBacklog('Ticket introuvable dans Notion : ' + id); return p[0]; }
   async creer(e) {
     const v = valider(this.collection, e, { strict: true });
+    await this.schemaAJour();
     if ((await this.pages(v.id)).length) throw new ErreurBacklog('Identifiant déjà utilisé : ' + v.id);
     const p = await this.client.appel('POST', '/pages', { parent: { database_id: this.base }, properties: versNotion(this.collection, complet(this.collection, v)) });
     this.cache = null; return depuisNotion(this.collection, p);
   }
   async modifier(id, champs) {
     const v = valider(this.collection, champs); delete v.id;
+    await this.schemaAJour();
     const p = await this.page(id);
     const r = await this.client.appel('PATCH', `/pages/${p.id}`, { properties: versNotion(this.collection, v) });
     this.cache = null; return depuisNotion(this.collection, r);

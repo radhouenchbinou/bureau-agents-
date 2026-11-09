@@ -186,6 +186,7 @@
       const opts = d.options || (k === 'filiale' ? E.filiales.map(f => f.nom) : [...new Set(E[coll].elements.map(e => e[k]).filter(Boolean))]);
       inp = h('select', { name: k }, !d.defaut && k !== 'filiale' ? h('option', { value: '', text: '—' }) : null, k === 'filiale' && !v ? h('option', { value: '', text: 'Choisir…' }) : null, opts.map(o => h('option', { value: o, text: o, selected: o === v })));
     } else if (d.type === 'nombre') inp = h('input', { name: k, type: 'number', min: 1, value: v == null ? '' : v });
+    else if (d.auto) inp = h('input', { name: k, value: v || '', readonly: true, title: 'Tenu par l\'outil GitHub du Siège' });
     else if (d.type === 'liste') inp = h('input', { name: k, value: (v || []).join(', '), placeholder: 'ex. COL-001, GRP-001' });
     else if (d.max > 300) inp = h('textarea', { name: k, text: v || '' });
     else inp = h('input', { name: k, value: v || '' });
@@ -195,7 +196,7 @@
     const s = schema(), nouveau = !e, val = e || {};
     const form = h('form', { class: 'carte', onsubmit: async ev => {
       ev.preventDefault();
-      const champs = {}; for (const [k, d] of Object.entries(s.champs)) { const el = form.elements[k]; if (!el) continue; champs[k] = d.type === 'nombre' ? (el.value === '' ? null : Number(el.value)) : el.value; }
+      const champs = {}; for (const [k, d] of Object.entries(s.champs)) { const el = form.elements[k]; if (!el || d.auto) continue; champs[k] = d.type === 'nombre' ? (el.value === '' ? null : Number(el.value)) : el.value; }
       try {
         if (nouveau) { const r = await act({ op: 'ticket.creer', collection: coll, ticket: champs }, 'Ticket créé'); fermer(); ficheTicket(E[coll].elements.find(x => x.id === r.id)); }
         else { await act({ op: 'ticket.modifier', collection: coll, id: e.id, champs }, 'Enregistré'); }

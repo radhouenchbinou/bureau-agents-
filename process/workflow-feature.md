@@ -26,6 +26,21 @@ Chaque mission confiée à un agent commence par `Filiale : <nom> — dossier <c
 - **Circuit court** (petit changement sans impact métier, sur accord du CEO) : 0 → 1 → 4 → 6 → 7 → Livré.
 - **Bug** : voir `/corriger` : 0 → 4 (correction + test qui reproduit) → 5 (le testeur vérifie) → 6 → Fermé.
 
+## Feature sur plusieurs filiales (un repo par filiale)
+
+Une feature qui touche plusieurs filiales se découpe en un **ticket parent** (souvent `GRP-…`) et **un ticket enfant
+par filiale** (`creer feature --filiale <Nom> --parent <PARENT> --dependances <producteur>`), décidés au cadrage.
+- Parent : 0 Cadrage → 2 Conception (l'architecte écrit le contrat dans `portfolio/interfaces.md`) → attente des
+  enfants → **8 Livraison groupée** → 9 Documentation.
+- Chaque enfant suit 1 → 7 dans sa filiale, avec sa branche et **sa PR inscrite sur son ticket**
+  (`github.js pr … --ticket <ID>`). Il s'arrête à 7 : pas de fusion seule (l'outil la refuse).
+- 8 sur le parent, quand tous les enfants sont validés en 7 : le devops lance
+  `node siege/github.js fusionner --role devops --ticket <PARENT>`. Chaque PR est vérifiée (approbation du CEO,
+  revue, sécurité, pas de conflit) avec un jeton limité à son repo ; **s'il en manque une, rien n'est fusionné**.
+  Sinon, fusion dans l'ordre des dépendances (producteur d'abord) et chaque enfant passe à « 8 · Livraison ».
+- Si une fusion échoue en cours de route (main déplacée, conflit apparu), l'outil s'arrête, met le parent « Bloqué »
+  et note exactement ce qui est fusionné ou non : le CEO décide (corriger et relancer, ou revert).
+
 ## Contexte propre
 
 Chaque étape se fait dans une nouvelle session du directeur et chaque tâche dans un nouvel agent : rien ne passe de

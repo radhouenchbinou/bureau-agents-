@@ -17,6 +17,11 @@ function demarrer() {
       if (req.method === 'POST' && u.pathname === '/databases') {
         const d = { id: id(), properties: corps.properties, parent: corps.parent }; bases.set(d.id, d); return ok(200, { object: 'database', id: d.id, url: 'https://notion.so/' + d.id });
       }
+      if ((req.method === 'GET' || req.method === 'PATCH') && (m = /^\/databases\/([^/]+)$/.exec(u.pathname))) {
+        const d = bases.get(m[1]); if (!d) return ok(404, { message: 'Could not find database' });
+        if (req.method === 'PATCH') Object.assign(d.properties, corps.properties || {});
+        return ok(200, { object: 'database', id: d.id, properties: d.properties });
+      }
       if (req.method === 'POST' && (m = /^\/databases\/([^/]+)\/query$/.exec(u.pathname))) {
         if (!bases.has(m[1])) return ok(404, { message: 'Could not find database' });
         let l = [...pages.values()].filter(p => p.parent.database_id === m[1] && !p.archived);
