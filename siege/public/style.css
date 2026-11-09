@@ -158,3 +158,8 @@ label.champ.coche{display:flex;align-items:center;gap:8px;grid-column:1/-1}
 .erreur-red{color:var(--risk);font-size:13px}
 .redaction textarea[name="description"],.redaction textarea[name="reproduction"]{min-height:240px;font:12.5px/1.5 var(--mono)}
 .bandeau.libre{border-color:var(--risk);background:color-mix(in srgb,var(--risk) 14%,transparent);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+/* EIA-018 : vue 2.5D du Bureau (CSS seul, sans bibliothèque 3D). Désactivée si l'utilisateur préfère moins de mouvement. */
+.bureau-barre { display: flex; justify-content: flex-end; margin: 0 0 .5rem; }
+.immeuble.vue25d { transform: perspective(1100px) rotateX(38deg) rotateZ(-3deg); transform-origin: 50% 0; transition: transform .45s ease; }
+@media (prefers-reduced-motion: reduce) { .immeuble.vue25d { transition: none; } }
