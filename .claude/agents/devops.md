@@ -6,6 +6,7 @@ model: sonnet
 skills:
   - backlog-siege
   - demander-une-exception
+  - passation
   - pipeline-ci-securise
   - fusion-apres-validations
 ---

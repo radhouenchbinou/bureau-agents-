@@ -6,6 +6,7 @@ model: opus
 skills:
   - backlog-siege
   - demander-une-exception
+  - passation
   - rediger-un-adr
   - ecrire-un-contrat-d-interface
 ---

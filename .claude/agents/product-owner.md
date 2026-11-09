@@ -6,6 +6,7 @@ model: sonnet
 skills:
   - backlog-siege
   - demander-une-exception
+  - passation
   - ecrire-une-user-story
 ---
 Tu es Product Owner. Ta mission commence par `Filiale : <nom> — dossier <chemin>`.

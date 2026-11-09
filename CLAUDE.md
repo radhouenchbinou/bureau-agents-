@@ -92,6 +92,21 @@ poussent `feature/…` ou `fix/…` et ouvrent la PR ; le reviewer et le RSSI po
 et `agents/securite` ; le **devops fusionne** dans `main` seulement si le CEO a approuvé la PR sur GitHub
 et que les deux feux sont verts (l'outil le vérifie).
 
+## Contexte propre (économie de jetons)
+
+Chaque tâche se fait dans un **contexte neuf** et s'arrête avec lui ; ce qui doit survivre passe par les fichiers et le
+ticket (skill `passation`). La garde l'impose.
+- **Un agent = une tâche.** Chaque mission lance un nouvel agent (jamais `SendMessage` vers un agent qui a fini, jamais de
+  `fork`, qui hériterait de ton contexte). Sur « Corriger », nouvel agent avec le chemin du livrable et la remarque du CEO.
+- **Mission courte** : en-tête `Filiale : … — dossier …`, `Ticket : <ID>`, `Étape : <n> · <nom>`, puis les chemins
+  à lire. Ne recopie jamais un fichier dans une mission : donne son chemin.
+- **Compte rendu court** : l'agent rend 10 lignes au plus et laisse sa passation sur le ticket. Tu ne relis du livrable
+  que ce qu'il faut pour le contrôler (titres, critères, verdict), pas le fichier entier par habitude.
+- **Une session du directeur = une étape d'un ticket.** Après « Valider » : mets le ticket à l'étape suivante, commente
+  `Validé par le CEO · Étape suivante : <n> · <nom>`, puis **termine ton tour** en indiquant au CEO de relancer
+  (`/clear` puis `/feature <ID>`, ou « Lancer » dans le Siège). La nouvelle session reprend à l'étape du ticket, à
+  partir de la dernière passation. La garde refuse une mission d'une autre étape dans la même session.
+
 ## Règles d'orchestration
 
 1. **Une demande = un circuit** : suis `process/workflow-feature.md`.
@@ -100,6 +115,7 @@ et que les deux feux sont verts (l'outil le vérifie).
    (Valider / Corriger / Arrêter). Étape suivante uniquement après « Valider ».
    Si l'outil de question à choix n'est pas disponible (session non interactive), pose la
    même question en texte et **termine ton tour** : n'enchaîne jamais sans réponse.
+   Après « Valider », l'étape suivante se fait dans une nouvelle session (voir « Contexte propre »).
 3. **Cloisonnement** : un agent de filiale ne modifie jamais le dossier d'une autre filiale.
 4. **Inter-filiales** : tout échange entre filiales (événement, API, fichier partagé)
    passe d'abord par `architecte`, qui met à jour `portfolio/interfaces.md` avant

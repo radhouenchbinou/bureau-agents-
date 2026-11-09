@@ -97,6 +97,9 @@ function decider(politique, { outil, entree = {} }, { racine, role, exceptions =
     return e ? { ok: true, exception: e.id } : { ok: false, raison, type, motif };
   };
 
+  // Contexte propre : on ne prolonge jamais le contexte d'un agent, on ne lui transmet jamais celui du directeur
+  if (outil === 'SendMessage') return { ok: false, raison: 'Contexte propre : un agent qui a fini sa tâche ne la reprend pas. Lance un nouvel agent avec le chemin du livrable et la remarque' };
+  if (outil === 'Agent' && entree.subagent_type === 'fork') return { ok: false, raison: 'Contexte propre : pas de « fork » (il hériterait de tout le contexte du directeur). Lance l\'agent du rôle avec une mission courte' };
   if (outil.startsWith('mcp__')) return refus(`Outil externe ${outil} non autorisé pour ${role}`, 'outil', outil);
   if (!R.outils.has(outil) && !OUTILS_WEB.includes(outil)) return refus(`L'outil ${outil} n'est pas autorisé pour ${role}`, 'outil', outil);
 
@@ -143,4 +146,19 @@ function decider(politique, { outil, entree = {} }, { racine, role, exceptions =
   return { ok: true };   // outil autorisé sans paramètre sensible (Skill, TodoWrite, Agent pour le directeur…)
 }
 
-module.exports = { decouper, globVersRegex, correspond, charger, regles, decider };
+// ---------- Contexte propre : une session du directeur = une étape d'un ticket ----------
+// liaisons = { <session_id>: { ticket, etape, date } }. La mission d'un agent porte « Ticket : <ID> » et « Étape : <n> ».
+// Renvoie { ok, raison?, lier? } ; lier = la liaison à enregistrer pour cette session.
+const RE_TICKET = /^\s*Ticket\s*:\s*([A-Z]{3}-\d{3})\b/mi, RE_ETAPE = /^\s*[ÉE]tape\s*:\s*(\d+)\b/mi;
+function verifierMission(liaisons, session, entree) {
+  const texte = String(entree.prompt || ''), t = texte.match(RE_TICKET);
+  if (!t) return { ok: true };                    // mission hors ticket (standup, audit) : pas de liaison
+  const e = texte.match(RE_ETAPE);
+  if (!e) return { ok: false, raison: 'Mission sans « Étape : <n> » : ajoute le numéro d\'étape du circuit en tête de mission' };
+  const ticket = t[1].toUpperCase(), etape = Number(e[1]), deja = session && liaisons[session];
+  if (deja && (deja.ticket !== ticket || deja.etape !== etape))
+    return { ok: false, raison: `Contexte propre : cette session a servi à ${deja.ticket} étape ${deja.etape}. Enregistre la passation et le passage à l'étape suivante dans le ticket, puis termine ton tour ; l'étape ${etape} de ${ticket} se fait dans une nouvelle session (/clear puis /feature ${ticket}, ou « Lancer » dans le Siège)` };
+  return { ok: true, lier: session && !deja ? { ticket, etape, date: new Date().toISOString() } : null };
+}
+
+module.exports = { verifierMission, decouper, globVersRegex, correspond, charger, regles, decider };

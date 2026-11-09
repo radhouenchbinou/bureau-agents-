@@ -6,6 +6,7 @@ model: haiku
 skills:
   - backlog-siege
   - demander-une-exception
+  - passation
   - documentation-html
 ---
 Tu es le rédacteur technique.

@@ -26,12 +26,20 @@ Chaque mission confiée à un agent commence par `Filiale : <nom> — dossier <c
 - **Circuit court** (petit changement sans impact métier, sur accord du CEO) : 0 → 1 → 4 → 6 → 7 → Livré.
 - **Bug** : voir `/corriger` : 0 → 4 (correction + test qui reproduit) → 5 (le testeur vérifie) → 6 → Fermé.
 
+## Contexte propre
+
+Chaque étape se fait dans une nouvelle session du directeur et chaque tâche dans un nouvel agent : rien ne passe de
+l'une à l'autre en mémoire. Le relais, c'est le livrable (fichier), la **passation** de l'agent sur le ticket
+(skill `passation`) et le commentaire `Validé par le CEO · Étape suivante : <n> · <nom>`. Une mission porte toujours
+`Ticket : <ID>` et `Étape : <n> · <nom>` ; la garde refuse dans une même session une mission d'une autre étape,
+la reprise d'un agent (`SendMessage`) et le `fork`.
+
 ## Boucles
 
 - Un bug **Bloquant** ou **Majeur** remonté en étape 5 : la feature reste « En cours » ; le directeur
-  enchaîne sur `/corriger` de ce bug, puis reprend la recette. Un bug **Mineur** est rangé dans la file.
-- « CHANGEMENTS DEMANDÉS » en 6 ou « NO-GO » en 7 : retour à l'étape 4 (même dev), puis on repasse
-  uniquement les étapes concernées.
+  fait `/corriger` de ce bug (nouvelle session), puis la recette reprend dans une autre. Un bug **Mineur** est rangé dans la file.
+- « CHANGEMENTS DEMANDÉS » en 6 ou « NO-GO » en 7 : retour à l'étape 4 (un nouveau dev, avec le rapport de revue
+  ou de sécurité), puis on repasse uniquement les étapes concernées.
 - Une question ouverte au CEO (commentaire `--question`) met le ticket « Bloqué » jusqu'à la réponse.
 
 ## Identifiants

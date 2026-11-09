@@ -6,6 +6,7 @@ model: sonnet
 skills:
   - backlog-siege
   - demander-une-exception
+  - passation
   - tdd-et-changement-minimal
   - branche-et-commit
   - interface-accessible

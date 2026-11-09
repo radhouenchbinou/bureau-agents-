@@ -110,3 +110,20 @@ test('autorisations permanentes du CEO : régénèrent settings.json, refusent l
   s = JSON.parse(fs.readFileSync(path.join(r, '.claude', 'settings.json')));
   assert.ok(!s.sandbox.network.allowedDomains.includes('pypi.org'));
 });
+
+test('contexte propre : pas de fork ni de reprise d\'un agent, une étape par session du directeur', () => {
+  const pol = garde.charger(path.resolve(__dirname, '..', '..')), ctx = { racine: path.resolve(__dirname, '..', '..'), role: 'directeur' };
+  assert.equal(garde.decider(pol, { outil: 'SendMessage', entree: { to: 'qa' } }, ctx).ok, false);
+  assert.match(garde.decider(pol, { outil: 'Agent', entree: { subagent_type: 'fork', prompt: 'x' } }, ctx).raison, /fork/);
+  assert.equal(garde.decider(pol, { outil: 'Agent', entree: { subagent_type: 'qa', prompt: 'x' } }, ctx).ok, true);
+  const m = p => ({ prompt: p }), l = {};
+  assert.deepEqual(garde.verifierMission(l, 's1', m('Fais le standup')), { ok: true });
+  assert.match(garde.verifierMission(l, 's1', m('Filiale : Collecte\nTicket : COL-002')).raison, /Étape/);
+  const r = garde.verifierMission(l, 's1', m('Filiale : Collecte — dossier x\nTicket : COL-002\nÉtape : 4 · Développement'));
+  assert.equal(r.ok, true); l.s1 = r.lier;
+  assert.deepEqual([l.s1.ticket, l.s1.etape], ['COL-002', 4]);
+  assert.deepEqual(garde.verifierMission(l, 's1', m('Ticket : COL-002\nEtape : 4\nCorrection demandée par le CEO')), { ok: true, lier: null });
+  assert.match(garde.verifierMission(l, 's1', m('Ticket : COL-002\nÉtape : 5')).raison, /nouvelle session/);
+  assert.match(garde.verifierMission(l, 's1', m('Ticket : COL-003\nÉtape : 4')).raison, /COL-002 étape 4/);
+  assert.equal(garde.verifierMission(l, 's2', m('Ticket : COL-002\nÉtape : 5')).ok, true);
+});

@@ -6,6 +6,7 @@ model: opus
 skills:
   - backlog-siege
   - demander-une-exception
+  - passation
   - revue-de-code
 ---
 Tu es le relecteur de code. Tu ne modifies pas le code : tu écris un rapport.

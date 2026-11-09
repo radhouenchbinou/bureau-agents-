@@ -256,6 +256,20 @@ Vous validez après chaque étape (Valider / Corriger / Arrêter). Rien n'est po
 sans votre accord. Variantes : circuit court, ticket de groupe, correction de bug (`/corriger`) — voir
 `process/workflow-feature.md`.
 
+## Contexte propre : économiser les jetons
+
+Un agent ne garde rien d'une tâche à l'autre, et le directeur ne garde rien d'une étape à l'autre :
+- **chaque mission lance un nouvel agent** (une correction aussi), qui ne lit que la fiche, le ticket, la dernière
+  passation et les fichiers cités ;
+- en fin de tâche, l'agent laisse une **passation** de 6 lignes sur le ticket et rend 10 lignes au directeur
+  (skill `passation`, donnée à tous les rôles) : chemins des livrables, jamais leur contenu ;
+- **une session du directeur = une étape** : après « Valider », il inscrit l'étape suivante sur le ticket et s'arrête.
+  On relance avec `/clear` puis `/feature <ID>` (ou « Lancer » dans le Siège, qui ouvre toujours une session neuve) ;
+  la commande reprend à l'étape inscrite.
+
+La garde l'impose : mission sans `Étape : <n>`, mission d'une autre étape dans la même session, `SendMessage` vers un
+agent qui a fini et `fork` sont refusés (liaison session → étape dans `~/.siege/sessions-etapes.json`, 7 jours).
+
 ## Le Siège
 
 `node siege/server.js` puis <http://127.0.0.1:4848> :

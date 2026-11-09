@@ -6,6 +6,7 @@ model: opus
 skills:
   - backlog-siege
   - demander-une-exception
+  - passation
   - audit-securite
   - detection-de-secrets
 ---
