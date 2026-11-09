@@ -29,6 +29,9 @@ function modifier(f) {
   } finally { fs.closeSync(fd); fs.unlinkSync(verrou); }
 }
 const trouver = (r, id) => r.liste.find(e => e.id === id) || refus('Exception introuvable : ' + id);
+// Journal par agent (EIA-017) : chaque transition s'inscrit sur l'entrée du lancement ; ne lève jamais, ne change aucun statut
+const inscrire = (e, nature) => { try { if (e && e.journal) require('./journal-agents').evenement(e.agent, e.journal, { nature, outil: e.type, motif: e.motif, exception: e.id }); } catch {} };
+const entreeJournal = (agent, ticket) => { try { return ticket ? require('./journal-agents').derniere(agent, ticket) : null; } catch { return null; } };
 const texte = (s, max) => String(s || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 
 function demander({ agent, ticket, type, motif, justification }) {
@@ -39,26 +42,32 @@ function demander({ agent, ticket, type, motif, justification }) {
   if (/^\*+$|^\/$|^\*\*/.test(motif)) refus('Motif trop large : une exception vise une action précise');
   justification = texte(justification, 1000); if (justification.length < 15) refus('Justification obligatoire (pourquoi cette action est nécessaire pour la tâche)');
   if (ticket && !/^([A-Z]{3}-\d{3}|BUG-\d{3})$/.test(ticket)) refus('Ticket invalide');
-  return modifier(r => { const e = { id: 'EXC-' + String(++r.seq).padStart(3, '0'), agent, ticket: ticket || '', type, motif, justification, statut: 'demandee', demandee_le: maintenant() }; r.liste.push(e); return e; });
+  const journal = entreeJournal(agent, ticket);
+  const cree = modifier(r => { const e = { id: 'EXC-' + String(++r.seq).padStart(3, '0'), agent, ticket: ticket || '', type, motif, justification, statut: 'demandee', demandee_le: maintenant() }; if (journal) e.journal = journal; r.liste.push(e); return e; });
+  inscrire(cree, 'exception_demandee'); return cree;
 }
 // Réservé au CEO : appelé par le serveur du Siège ou en ligne de commande par un humain (la garde l'interdit aux agents)
 function decider(id, accord, commentaire = '') {
-  return modifier(r => {
+  const res = modifier(r => {
     const e = trouver(r, id); if (e.statut !== 'demandee') refus(`${id} est « ${e.statut} » : seule une demande en attente se décide`);
     Object.assign(e, { statut: accord ? 'accordee' : 'refusee', decidee_le: maintenant(), decidee_par: 'CEO', commentaire_ceo: texte(commentaire, 500) });
     return e;
   });
+  inscrire(res, accord ? 'exception_accordee' : 'exception_refusee'); return res;
 }
 function activer(id) {
-  return modifier(r => { const e = trouver(r, id); if (e.statut !== 'accordee') refus(`${id} n'est pas accordée par le CEO (statut : ${e.statut})`); Object.assign(e, { statut: 'active', activee_le: maintenant() }); return e; });
+  const res = modifier(r => { const e = trouver(r, id); if (e.statut !== 'accordee') refus(`${id} n'est pas accordée par le CEO (statut : ${e.statut})`); Object.assign(e, { statut: 'active', activee_le: maintenant() }); return e; });
+  inscrire(res, 'exception_activee'); return res;
 }
 function terminer(id, raison = 'terminée par le directeur') {
-  return modifier(r => { const e = trouver(r, id); if (!['active', 'accordee'].includes(e.statut)) refus(`${id} n'est pas en cours`); Object.assign(e, { statut: 'terminee', terminee_le: maintenant(), fin: raison }); return e; });
+  const res = modifier(r => { const e = trouver(r, id); if (!['active', 'accordee'].includes(e.statut)) refus(`${id} n'est pas en cours`); Object.assign(e, { statut: 'terminee', terminee_le: maintenant(), fin: raison }); return e; });
+  inscrire(res, 'exception_terminee'); return res;
 }
 // Fin de tâche d'un agent : toutes ses exceptions actives se ferment
 function terminerPourAgent(agent) {
   const r0 = lire(); if (!r0.liste.some(e => e.agent === agent && e.statut === 'active')) return [];
-  return modifier(r => r.liste.filter(e => e.agent === agent && e.statut === 'active').map(e => Object.assign(e, { statut: 'terminee', terminee_le: maintenant(), fin: 'tâche de l\'agent terminée' })));
+  const res = modifier(r => r.liste.filter(e => e.agent === agent && e.statut === 'active').map(e => Object.assign(e, { statut: 'terminee', terminee_le: maintenant(), fin: 'tâche de l\'agent terminée' })));
+  for (const e of res) inscrire(e, 'exception_terminee'); return res;
 }
 const actives = agent => lire().liste.filter(e => e.agent === agent && e.statut === 'active');
 function noterUsage(id) { try { modifier(r => { const e = r.liste.find(x => x.id === id); if (e) { e.utilisations = (e.utilisations || 0) + 1; e.derniere_utilisation = maintenant(); } }); } catch {} }
