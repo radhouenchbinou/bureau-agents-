@@ -24,8 +24,8 @@ test('Telegram : du message du collaborateur au ticket, avec validation et déci
   const prive = fs.mkdtempSync(path.join(os.tmpdir(), 'siege-tg-')), api = await fausseApi();
   Object.assign(process.env, { SIEGE_PRIVE: prive, TELEGRAM_API_URL: 'http://127.0.0.1:' + api.address().port });
   delete process.env.TELEGRAM_TOKEN;
-  for (const k of Object.keys(require.cache)) if (/siege[\\/](lib[\\/](telegram|demandes|messagerie)|demande)\.js$/.test(k)) delete require.cache[k];
-  const tg = require('../lib/telegram'), dem = require('../lib/demandes'), { Messagerie } = require('../lib/messagerie'), cli = require('../demande');
+  for (const k of Object.keys(require.cache)) if (/siege[\\/](lib[\\/](telegram|slack|canaux|demandes|messagerie)|demande)\.js$/.test(k)) delete require.cache[k];
+  const tg = require('../lib/telegram'), dem = require('../lib/demandes'), { Messagerie, communModifier } = require('../lib/messagerie'), cli = require('../demande');
   const log = console.log; const sortie = []; console.log = (...a) => sortie.push(a.join(' '));
   try {
     assert.throws(() => tg.enregistrerJeton('pas-un-jeton'), /BotFather/);
@@ -91,7 +91,7 @@ test('Telegram : du message du collaborateur au ticket, avec validation et déci
     assert.match(api.envois.at(-1).text, /Beaucoup de messages/);
 
     // Plafond de sessions automatiques : le CEO est prévenu, la demande attend
-    tg.modifier(s => { s.plafondJour = 1; s.sessions = {}; });
+    communModifier(s => { s.plafondJour = 1; s.sessions = {}; });
     const m2 = new Messagerie({ racine: '/x', lancer: async () => {} });
     m2.planifier('DEM-002'); await new Promise(r => setTimeout(r, 30)); m2.planifier('DEM-003'); await new Promise(r => setTimeout(r, 30));
     assert.match(api.envois.at(-1).text, /Plafond de 1 sessions/); assert.deepStrictEqual(m2.attente, ['DEM-003']);

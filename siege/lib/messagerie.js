@@ -1,15 +1,32 @@
-// Messagerie Telegram du Siège (tourne dans le serveur quand l'option est active) :
-//  - reçoit les messages (long polling) : collaborateur autorisé → demande DEM-… et session automatique du directeur ;
-//    inconnu → demande d'accès au CEO, rien n'est traité ; CEO → réponses aux escalades ;
+// Messagerie du Siège, commune à Telegram et Slack (chacun activable dans Siège › Intégrations) :
+//  - un message d'un collaborateur autorisé → demande DEM-… et session automatique du directeur ;
+//    une personne inconnue → demande d'accès au CEO, rien n'est traité ; le CEO → consignes en réponse aux escalades ;
 //  - boutons : le demandeur valide le résumé, le CEO accepte ou refuse ;
-//  - prévient le CEO une fois par sujet : escalade, question d'agent en attente, exception à décider, demande d'accès.
+//  - prévient le CEO une fois par sujet (sur chaque canal où il est enregistré) : escalades, questions d'agents,
+//    exceptions à décider, demandes d'accès ;
+//  - une seule file de sessions du directeur et un seul plafond par jour, tous canaux confondus (~/.siege/messagerie.json).
 'use strict';
 const fs = require('fs'), path = require('path'), os = require('os'), { spawn } = require('child_process');
-const tg = require('./telegram'), dem = require('./demandes');
+const tg = require('./telegram'), sl = require('./slack'), dem = require('./demandes'), canaux = require('./canaux');
 
 const PAR_HEURE = 20;            // messages acceptés par collaborateur et par heure
 const SESSION_MAX_MS = 10 * 60e3;
 const jour = () => new Date().toISOString().slice(0, 10);
+const PRIVE = () => process.env.SIEGE_PRIVE || path.join(os.homedir(), '.siege');
+const F_COMMUN = () => path.join(PRIVE(), 'messagerie.json');
+
+// Compteurs communs ; repris de telegram.json la première fois (versions précédentes)
+function commun() {
+  try { return { sessions: {}, plafondJour: 50, ...JSON.parse(fs.readFileSync(F_COMMUN(), 'utf8')) }; }
+  catch { const t = tg.lire(); return { sessions: t.sessions || {}, plafondJour: t.plafondJour || 50 }; }
+}
+function communModifier(fn) {
+  const c = commun(); const r = fn(c);
+  c.sessions = Object.fromEntries(Object.entries(c.sessions).slice(-14));
+  fs.mkdirSync(PRIVE(), { recursive: true, mode: 0o700 });
+  const t = F_COMMUN() + '.' + process.pid + '.tmp'; fs.writeFileSync(t, JSON.stringify(c), { mode: 0o600 }); fs.renameSync(t, F_COMMUN());
+  return r;
+}
 
 const AIDE_COLLAB = 'Écrivez-moi simplement votre besoin : un bug (ce que vous faisiez, ce qui s\'est passé, ce que vous attendiez) ou une évolution. Je vous réponds ici.\n/mes : vos demandes · /nouvelle : commencer une autre demande';
 
@@ -20,86 +37,72 @@ class Messagerie {
     this.lancer = lancer || (id => lancerClaude(racine, id, journal));
   }
 
-  // ---------- Réception ----------
-  async traiter(u) {
-    if (u.callback_query) return this.bouton(u.callback_query);
-    const m = u.message; if (!m || !m.from || m.from.is_bot) return;
-    if (!m.chat || m.chat.type !== 'private') return;      // conversations privées avec le bot seulement
-    const e = tg.lire(), de = tg.qui(m.from), t = String(m.text || '').trim();
-    const ceo = e.ceo && e.ceo.id === de.id, collab = e.collaborateurs.find(c => c.id === de.id);
-    if (!ceo && !collab) return this.inconnu(de);
-    if (!t) return tg.envoyer(de.id, 'Je ne lis que le texte pour l\'instant.');
-    if (ceo) return this.duCeo(m, t);
-    if (!this.rythme(de.id)) return tg.envoyer(de.id, 'Beaucoup de messages en peu de temps : je les traiterai un peu plus tard. Réessayez dans un moment.');
-    if (t === '/start' || t === '/aide') return tg.envoyer(de.id, `Bonjour ${collab.nom}, je suis le directeur de programme.\n${AIDE_COLLAB}`);
+  // ---------- Réception, commune aux canaux : ev = { de: {id, nom, username}, texte, prive, reponseA } ----------
+  async message(c, ev) {
+    if (!ev.prive || !ev.de) return;                       // conversations privées avec le bot seulement
+    const e = c.lire(), de = ev.de, t = String(ev.texte || '').trim();
+    const ceo = e.ceo && String(e.ceo.id) === String(de.id), collab = e.collaborateurs.find(x => String(x.id) === String(de.id));
+    if (!ceo && !collab) return this.inconnu(c, de);
+    if (!t) return c.envoyer(de.id, 'Je ne lis que le texte pour l\'instant.');
+    if (ceo) return this.duCeo(c, de, t, ev.reponseA);
+    const cle = c.cle(de.id);
+    if (!this.rythme(cle)) return c.envoyer(de.id, 'Beaucoup de messages en peu de temps : je les traiterai un peu plus tard. Réessayez dans un moment.');
+    if (t === '/start' || t === '/aide') return c.envoyer(de.id, `Bonjour ${collab.nom}, je suis le directeur de programme.\n${AIDE_COLLAB}`);
     if (t === '/mes') {
-      const l = dem.lire().liste.filter(x => x.auteur.id === de.id).slice(-10);
-      return tg.envoyer(de.id, l.length ? l.map(x => `${x.id} · ${x.statut}${x.ticket ? ' · ' + x.ticket : ''} · ${(x.resume || x.messages[0].texte).slice(0, 60)}`).join('\n') : 'Aucune demande pour l\'instant.');
+      const l = dem.lire().liste.filter(x => String(x.auteur.id) === String(cle)).slice(-10);
+      return c.envoyer(de.id, l.length ? l.map(x => `${x.id} · ${x.statut}${x.ticket ? ' · ' + x.ticket : ''} · ${(x.resume || x.messages[0].texte).slice(0, 60)}`).join('\n') : 'Aucune demande pour l\'instant.');
     }
     let nouvelle = false, texte = t;
-    if (t.startsWith('/nouvelle')) { nouvelle = true; texte = t.slice(9).trim(); if (!texte) { tg.modifier(s => { (s.nouvelle = s.nouvelle || {})[de.id] = true; }); return tg.envoyer(de.id, 'D\'accord : votre prochain message ouvrira une nouvelle demande.'); } }
-    if (texte.startsWith('/')) return tg.envoyer(de.id, AIDE_COLLAB);
-    if (!nouvelle && (tg.lire().nouvelle || {})[de.id]) { nouvelle = true; tg.modifier(s => { delete s.nouvelle[de.id]; }); }
-    const x = dem.recevoir({ id: de.id, nom: collab.nom }, texte, { nouvelle });
-    await tg.envoyer(de.id, `${x.id} · Bien reçu, je regarde et je vous réponds ici.`);
+    if (t.startsWith('/nouvelle')) { nouvelle = true; texte = t.slice(9).trim(); if (!texte) { c.modifier(s => { (s.nouvelle = s.nouvelle || {})[de.id] = true; }); return c.envoyer(de.id, 'D\'accord : votre prochain message ouvrira une nouvelle demande.'); } }
+    if (texte.startsWith('/')) return c.envoyer(de.id, AIDE_COLLAB);
+    if (!nouvelle && (c.lire().nouvelle || {})[de.id]) { nouvelle = true; c.modifier(s => { delete s.nouvelle[de.id]; }); }
+    const x = dem.recevoir({ id: cle, nom: collab.nom }, texte, { nouvelle });
+    await c.envoyer(de.id, `${x.id} · Bien reçu, je regarde et je vous réponds ici.`);
     this.planifier(x.id);
   }
-  async inconnu(de) {
-    const nouveau = tg.modifier(s => { if (s.enAttente.some(a => a.id === de.id)) return false; s.enAttente.push({ ...de, date: new Date().toISOString() }); return true; });
-    await tg.envoyer(de.id, 'Ce bot est réservé aux équipes de l\'entreprise. Votre demande d\'accès est transmise ; vous serez prévenu quand elle sera acceptée.');
-    if (nouveau) await this.auCeo(`acces:${de.id}`, `Demande d'accès au bot : ${de.nom}${de.username ? ' (@' + de.username + ')' : ''}. À autoriser ou refuser dans Siège › Intégrations › Telegram.`);
+  async inconnu(c, de) {
+    const nouveau = c.modifier(s => { if (s.enAttente.some(a => String(a.id) === String(de.id))) return false; s.enAttente.push({ ...de, date: new Date().toISOString() }); return true; });
+    await c.envoyer(de.id, 'Ce bot est réservé aux équipes de l\'entreprise. Votre demande d\'accès est transmise ; vous serez prévenu quand elle sera acceptée.');
+    if (nouveau) await this.auCeo(`acces:${c.nom}:${de.id}`, `Demande d'accès au ${c.libelle} du directeur : ${de.nom}${de.username ? ' (@' + de.username + ')' : ''}. À autoriser ou refuser dans Siège › Intégrations › ${c.libelle}.`);
   }
-  async duCeo(m, t) {
-    const e = tg.lire(), lie = m.reply_to_message && e.fils[m.reply_to_message.message_id];
-    if (lie) { dem.ceo(lie, { texte: t }); await tg.envoyer(m.from.id, `${lie} · Consigne transmise au directeur.`); return this.planifier(lie); }
+  async duCeo(c, de, t, reponseA) {
+    const lie = reponseA && c.lire().fils[reponseA];
+    if (lie) { dem.ceo(lie, { texte: t }); await c.envoyer(de.id, `${lie} · Consigne transmise au directeur.`); return this.planifier(lie); }
     if (t === '/demandes') {
       const l = dem.lire().liste.filter(dem.ouverte);
-      return tg.envoyer(m.from.id, l.length ? l.map(x => `${x.id} · ${x.statut} · ${x.auteur.nom} · ${(x.resume || x.messages[0].texte).slice(0, 60)}`).join('\n') : 'Aucune demande ouverte.');
+      return c.envoyer(de.id, l.length ? l.map(x => `${x.id} · ${x.statut} · ${x.auteur.nom} · ${(x.resume || x.messages[0].texte).slice(0, 60)}`).join('\n') : 'Aucune demande ouverte.');
     }
-    return tg.envoyer(m.from.id, 'Bonjour. Je vous écris ici quand une décision vous revient. Répondez à une de mes notifications pour qu\'elle aille à la bonne demande. /demandes : demandes ouvertes.');
+    return c.envoyer(de.id, 'Bonjour. Je vous écris ici quand une décision vous revient. Répondez à une de mes notifications (en fil sur Slack) pour qu\'elle aille à la bonne demande. /demandes : demandes ouvertes.');
   }
-  async bouton(q) {
-    const r = /^([vc]):(DEM-\d{3,5}):([01])$/.exec(q.data || ''), e = tg.lire();
-    const repondre = text => tg.appel('answerCallbackQuery', { callback_query_id: q.id, text }).catch(() => {});
-    if (!r || !q.from) return repondre('Action inconnue');
+  // ev = { de: id, data, repondre(texte) }
+  async bouton(c, ev) {
+    const r = /^([vc]):(DEM-\d{3,5}):([01])$/.exec(ev.data || ''), e = c.lire();
+    if (!r || ev.de == null) return ev.repondre('Action inconnue');
     try {
-      if (r[1] === 'v') { dem.validation(r[2], q.from.id, r[3] === '1'); await repondre(r[3] === '1' ? 'Merci, c\'est noté.' : 'D\'accord, précisez votre besoin en message.'); }
+      if (r[1] === 'v') { dem.validation(r[2], c.cle(ev.de), r[3] === '1'); await ev.repondre(r[3] === '1' ? 'Merci, c\'est noté.' : 'D\'accord, précisez votre besoin en message.'); }
       else {
-        if (!e.ceo || e.ceo.id !== q.from.id) return repondre('Réservé au CEO');
-        dem.ceo(r[2], { decision: r[3] === '1' ? 'accepte' : 'refuse' }); await repondre(r[3] === '1' ? 'Accepté' : 'Refusé');
+        if (!e.ceo || String(e.ceo.id) !== String(ev.de)) return ev.repondre('Réservé au CEO');
+        dem.ceo(r[2], { decision: r[3] === '1' ? 'accepte' : 'refuse' }); await ev.repondre(r[3] === '1' ? 'Accepté' : 'Refusé');
       }
       this.planifier(r[2]);
-    } catch (err) { await repondre(String(err.message).slice(0, 180)); }
+    } catch (err) { await ev.repondre(String(err.message).slice(0, 180)); }
   }
-  rythme(id) {
-    const t = Date.now(), l = (this.recents.get(id) || []).filter(x => t - x < 36e5);
+  rythme(cle) {
+    const t = Date.now(), l = (this.recents.get(cle) || []).filter(x => t - x < 36e5);
     if (l.length >= PAR_HEURE) return false;
-    l.push(t); this.recents.set(id, l); return true;
+    l.push(t); this.recents.set(cle, l); return true;
   }
 
-  // ---------- Sessions du directeur : une à la fois, plafond par jour ----------
-  planifier(id) { if (!this.attente.includes(id)) this.attente.push(id); this.suivant(); }
-  async suivant() {
-    if (this.enCours || !this.attente.length) return;
-    const e = tg.lire(), n = e.sessions[jour()] || 0;
-    if (n >= (e.plafondJour || 50)) {
-      return this.auCeo(`plafond:${jour()}`, `Plafond de ${e.plafondJour} sessions automatiques du directeur atteint aujourd'hui : ${this.attente.length} demande(s) en attente (${this.attente.join(', ')}). Relevez-le dans Siège › Intégrations › Telegram ou attendez demain.`);
+  // ---------- Telegram : mises à jour de l'API → événements communs ----------
+  async traiter(u) {
+    const c = canaux.telegram;
+    if (u.callback_query) {
+      const q = u.callback_query;
+      return this.bouton(c, { de: q.from && q.from.id, data: q.data, repondre: text => tg.appel('answerCallbackQuery', { callback_query_id: q.id, text }).catch(() => {}) });
     }
-    const id = this.attente.shift();
-    tg.modifier(s => { s.sessions[jour()] = (s.sessions[jour()] || 0) + 1; });
-    this.enCours = id; this.journal(`directeur → ${id}`);
-    try { await this.lancer(id); } catch (err) { this.journal(`session ${id} en échec : ${err.message}`); }
-    finally { this.enCours = null; setImmediate(() => this.suivant()); }
+    const m = u.message; if (!m || !m.from || m.from.is_bot || !m.chat) return;
+    return this.message(c, { de: tg.qui(m.from), texte: m.text, prive: m.chat.type === 'private', reponseA: m.reply_to_message ? String(m.reply_to_message.message_id) : '' });
   }
-
-  // ---------- Notifications du CEO (une seule fois par sujet) ----------
-  async auCeo(cle, texte) {
-    const e = tg.lire(); if (!e.actif || !e.ceo || e.notifies[cle]) return false;
-    await tg.envoyer(e.ceo.id, texte); tg.modifier(s => { s.notifies[cle] = new Date().toISOString(); }); return true;
-  }
-  async veille() { for (const [cle, texte] of await this.extras()) await this.auCeo(cle, texte).catch(err => this.journal('notification : ' + err.message)); }
-
-  // ---------- Boucle ----------
   async tour() {
     const e = tg.lire(); if (!e.actif || !tg.jeton()) return false;
     const l = await tg.appel('getUpdates', { offset: e.offset || 0, timeout: 25, allowed_updates: ['message', 'callback_query'] }, { delaiMs: 35e3 });
@@ -109,20 +112,67 @@ class Messagerie {
     }
     return true;
   }
-  demarrer() {
-    if (this.boucle) return; this.boucle = true;
-    const encore = async () => {
-      let ok = false; try { ok = await this.tour(); } catch (err) { this.journal('Telegram : ' + err.message); }
-      setTimeout(encore, ok ? 100 : 5e3);
-    };
-    encore(); setInterval(() => this.veille(), 60e3);
+
+  // ---------- Slack : événements Socket Mode → événements communs ----------
+  async slack(ev) {
+    const c = canaux.slack;
+    if (ev.type === 'bouton') return this.bouton(c, { de: ev.de, data: ev.data, repondre: text => sl.appel('chat.postEphemeral', { channel: ev.canal, user: ev.de, text }).catch(() => {}) });
+    const e = c.lire(), connu = (e.ceo && e.ceo.id === ev.de) || e.collaborateurs.find(x => x.id === ev.de) || e.enAttente.find(x => x.id === ev.de);
+    const de = connu ? { id: ev.de, nom: connu.nom, username: connu.username || '' } : await sl.qui(ev.de);
+    return this.message(c, { de, texte: ev.texte, prive: ev.prive, reponseA: ev.reponseA });
   }
+
+  // ---------- Sessions du directeur : une à la fois, plafond commun par jour ----------
+  planifier(id) { if (!this.attente.includes(id)) this.attente.push(id); this.suivant(); }
+  async suivant() {
+    if (this.enCours || !this.attente.length) return;
+    const k = commun(), n = k.sessions[jour()] || 0;
+    if (n >= (k.plafondJour || 50)) {
+      return this.auCeo(`plafond:${jour()}`, `Plafond de ${k.plafondJour} sessions automatiques du directeur atteint aujourd'hui : ${this.attente.length} demande(s) en attente (${this.attente.join(', ')}). Relevez-le dans Siège › Intégrations ou attendez demain.`);
+    }
+    const id = this.attente.shift();
+    communModifier(s => { s.sessions[jour()] = (s.sessions[jour()] || 0) + 1; });
+    this.enCours = id; this.journal(`directeur → ${id}`);
+    try { await this.lancer(id); } catch (err) { this.journal(`session ${id} en échec : ${err.message}`); }
+    finally { this.enCours = null; setImmediate(() => this.suivant()); }
+  }
+
+  // ---------- Notifications du CEO (une seule fois par sujet et par canal) ----------
+  async auCeo(cle, texte) {
+    let envoye = false;
+    for (const c of canaux.TOUS) {
+      const e = c.lire(); if (!c.pret() || !e.ceo || e.notifies[cle]) continue;
+      try { await c.envoyer(e.ceo.id, texte); c.modifier(s => { s.notifies[cle] = new Date().toISOString(); }); envoye = true; }
+      catch (err) { this.journal(`${c.libelle} : notification impossible (${err.message})`); }
+    }
+    return envoye;
+  }
+  async veille() { for (const [cle, texte] of await this.extras()) await this.auCeo(cle, texte).catch(err => this.journal('notification : ' + err.message)); }
+
+  // ---------- Boucles ----------
+  demarrer() {
+    if (!this.boucle) {
+      this.boucle = true;
+      const encore = async () => {
+        let ok = false; try { ok = await this.tour(); } catch (err) { this.journal('Telegram : ' + err.message); }
+        setTimeout(encore, ok ? 100 : 5e3);
+      };
+      encore(); setInterval(() => this.veille(), 60e3);
+    }
+    this.demarrerSlack();
+  }
+  demarrerSlack() {
+    if (this.socket || !canaux.slack.pret() || !sl.jetonApp()) return;
+    this.socket = new sl.Socket({ surEvenement: ev => this.slack(ev), journal: m => this.journal('[slack] ' + m) });
+    this.socket.ouvrir().catch(err => { this.journal('Slack : ' + err.message); this.socket.relancer(); });
+  }
+  arreterSlack() { if (this.socket) { this.socket.fermer(); this.socket = null; } }
 }
 
 // Session non interactive du directeur sur une demande, avec la garde et les droits habituels (settings.json du Siège)
 function lancerClaude(racine, id, journal) {
   return new Promise((ok, ko) => {
-    const f = path.join(process.env.SIEGE_PRIVE || path.join(os.homedir(), '.siege'), 'directeur-demandes.log');
+    const f = path.join(PRIVE(), 'directeur-demandes.log');
     const out = fs.openSync(f, 'a');
     fs.writeSync(out, `\n=== ${new Date().toISOString()} /demande ${id}\n`);
     const p = spawn(process.env.CLAUDE_BIN || 'claude', ['-p', `/demande ${id}`, '--output-format', 'text',
@@ -133,4 +183,4 @@ function lancerClaude(racine, id, journal) {
   });
 }
 
-module.exports = { Messagerie, lancerClaude, PAR_HEURE };
+module.exports = { Messagerie, lancerClaude, commun, communModifier, PAR_HEURE };

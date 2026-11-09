@@ -347,13 +347,13 @@
 
   // ---------- Demandes des collaborateurs (Telegram) ----------
   function rendreDemandes() {
-    const T = E.telegram, L = E.demandes, ouv = L.filter(x => !['Acceptée', 'Refusée', 'Close'].includes(x.statut));
+    const T = E.messagerie, L = E.demandes, ouv = L.filter(x => !['Acceptée', 'Refusée', 'Close'].includes(x.statut));
     const fil = x => h('div', { class: 'fil' }, x.messages.map(m => h('p', { class: 'msg ' + (m.de === 'collaborateur' ? 'lui' : m.de === 'CEO' ? 'ceo' : 'dir') },
       h('b', { text: m.de === 'collaborateur' ? x.auteur.nom : m.de === 'CEO' ? 'CEO' : 'Directeur' }), ' ', h('span', { class: 'muted', text: new Date(m.date).toLocaleString('fr-FR') }), h('br'), m.texte)));
     vider($('#v-demandes'),
       h('div', { class: 'carte' }, h('h3', { text: 'Demandes des collaborateurs' }),
-        h('p', { class: 'aide', text: T.actif ? `Telegram actif · ${ouv.length} ouverte(s) · ${T.sessionsAujourdhui}/${T.plafondJour} sessions du directeur aujourd'hui` + (T.enCours ? ' · le directeur traite ' + T.enCours : '') + (T.file.length ? ' · en file : ' + T.file.join(', ') : '')
-          : 'Telegram n\'est pas actif (Intégrations › Telegram) : aucune demande n\'arrive.' })),
+        h('p', { class: 'aide', text: T.canauxActifs.length ? `${T.canauxActifs.join(' et ')} actif${T.canauxActifs.length > 1 ? 's' : ''} · ${ouv.length} ouverte(s) · ${T.sessionsAujourdhui}/${T.plafondJour} sessions du directeur aujourd'hui` + (T.enCours ? ' · le directeur traite ' + T.enCours : '') + (T.file.length ? ' · en file : ' + T.file.join(', ') : '')
+          : 'Ni Telegram ni Slack n\'est actif (Intégrations) : aucune demande n\'arrive.' })),
       L.length ? L.map(x => h('details', { class: 'carte demande', open: ['Chez le CEO', 'À valider', 'Nouvelle'].includes(x.statut) },
         h('summary', {}, h('b', { text: x.id }), ' ', h('span', { class: 'tag' + (x.statut === 'Chez le CEO' ? ' question' : ['Acceptée'].includes(x.statut) ? ' ok' : ''), text: x.statut }), ' ', x.auteur.nom,
           x.type ? ' · ' + x.type : '', x.ticket ? ' → ' + x.ticket : '', ' — ', h('span', { class: 'muted', text: (x.resume || (x.messages[0] || {}).texte || '').slice(0, 90) })),
@@ -442,12 +442,24 @@
       h('p', { text: 'App « ' + r.app + ' » : ' + r.accessibles.length + ' repo(s) accessible(s).' }),
       r.manquants.length ? h('p', { class: 'attention', text: 'Repos déclarés mais non accessibles à l\'App (installez-la dessus) : ' + r.manquants.join(', ') }) : h('p', { text: 'Tous les repos déclarés sont accessibles.' })); }
 
-    // Telegram
-    const T = E.telegram, jT = mot('123456789:AA…', 'Jeton du bot Telegram'), plaf = h('input', { type: 'number', min: 1, max: 1000, value: T.plafondJour, 'aria-label': 'Plafond', style: 'width:90px' });
+    // Messagerie : Telegram et Slack (mêmes fonctions), file et plafond communs
+    const M = E.messagerie, plaf = h('input', { type: 'number', min: 1, max: 1000, value: M.plafondJour, 'aria-label': 'Plafond', style: 'width:90px' });
     const pers = (p, boutons) => h('li', {}, h('b', { text: p.nom }), p.username ? ' @' + p.username : '', ' ', h('span', { class: 'muted mono', text: '#' + p.id }), ' ', boutons);
     const btn = (t, op, msg, cls) => h('button', { type: 'button', class: 'btn petit' + (cls ? ' ' + cls : ''), text: t, onclick: () => act(op, msg).catch(() => {}) });
+    // Les personnes d'un canal : CEO, demandes d'accès, collaborateurs autorisés
+    const personnes = (nom, X, premierMot) => [
+      h('h4', { text: 'CEO' }), X.ceo ? h('ul', {}, pers(X.ceo, btn('Retirer', { op: nom + '.retirer', id: X.ceo.id }, 'Retiré'))) : h('p', { class: 'aide', text: 'Pas encore désigné.' }),
+      h('h4', { text: 'Demandes d\'accès (' + X.enAttente.length + ')' }),
+      X.enAttente.length ? h('ul', {}, X.enAttente.map(a => pers(a, h('span', {}, btn('Autoriser', { op: nom + '.autoriser', id: a.id }, 'Accès ouvert', 'prim'), ' ', btn('C\'est moi, le CEO', { op: nom + '.ceo', id: a.id }, 'CEO enregistré'), ' ', btn('Refuser', { op: nom + '.retirer', id: a.id }, 'Refusé'))))) : h('p', { class: 'aide', text: 'Aucune. ' + premierMot }),
+      h('h4', { text: 'Collaborateurs autorisés (' + X.collaborateurs.length + ')' }),
+      X.collaborateurs.length ? h('ul', {}, X.collaborateurs.map(c => pers(c, btn('Retirer', { op: nom + '.retirer', id: c.id }, 'Accès retiré')))) : h('p', { class: 'aide', text: 'Aucun.' })];
+    const messagerieC = h('div', { class: 'carte' }, h('h3', {}, 'Messagerie des collaborateurs ', etat(M.canauxActifs.length, M.canauxActifs.join(' + ') || '', 'inactive')),
+      h('p', { class: 'aide', text: 'Option, sur Telegram et/ou Slack : les collaborateurs écrivent au directeur (bug, évolution) ; chaque message lance une courte session du directeur, qui leur répond, leur fait valider un résumé, crée le ticket et vous transmet ce qui doit l\'être. Il vous prévient aussi des questions d\'agents et des exceptions à décider (que vous tranchez toujours ici). Les collaborateurs n\'ont jamais accès au Siège.' }),
+      h('div', { class: 'barre' }, h('span', { class: 'aide', text: 'Sessions automatiques du directeur (tous canaux) : ' + M.sessionsAujourdhui + ' aujourd\'hui, plafond par jour ' }), plaf,
+        btn2('Enregistrer', () => act({ op: 'messagerie.plafond', n: Number(plaf.value) }, 'Plafond enregistré'))));
+
+    const T = E.telegram, jT = mot('123456789:AA…', 'Jeton du bot Telegram');
     const telegram = h('div', { class: 'carte' }, h('h3', {}, 'Telegram ', etat(T.actif, 'actif', T.jeton ? 'inactif' : 'non branché')),
-      h('p', { class: 'aide', text: 'Option : les collaborateurs écrivent au directeur sur Telegram (bug, évolution) ; chaque message lance automatiquement une courte session du directeur, qui leur répond, leur fait valider un résumé, crée le ticket, et vous transmet ce qui doit l\'être. Il vous prévient aussi sur Telegram des questions d\'agents et des exceptions à décider (que vous tranchez toujours ici). Les collaborateurs n\'ont jamais accès au Siège.' }),
       h('ol', { class: 'aide' },
         h('li', {}, 'Créez un bot avec ', h('a', { href: 'https://t.me/BotFather', target: '_blank', rel: 'noopener', text: '@BotFather' }), ' (/newbot) et collez son jeton.'),
         h('li', { text: 'Activez, puis envoyez /start au bot depuis votre compte : vous apparaissez ci-dessous, désignez-vous comme CEO.' }),
@@ -456,15 +468,24 @@
         btn2('Tester', () => act({ op: 'telegram.tester' }).then(r => toast('Bot @' + r.bot + ' joignable')), !T.jeton),
         btn2(T.actif ? 'Désactiver' : 'Activer', () => act({ op: 'telegram.activer', oui: !T.actif }, T.actif ? 'Telegram désactivé' : 'Telegram activé'), !T.jeton, T.actif ? '' : 'prim')),
       T.bot ? h('p', { class: 'aide' }, 'Bot : ', h('a', { href: 'https://t.me/' + T.bot, target: '_blank', rel: 'noopener', text: '@' + T.bot })) : null,
-      h('h4', { text: 'CEO' }), T.ceo ? h('ul', {}, pers(T.ceo, btn('Retirer', { op: 'telegram.retirer', id: T.ceo.id }, 'Retiré'))) : h('p', { class: 'aide', text: 'Pas encore désigné.' }),
-      h('h4', { text: 'Demandes d\'accès (' + T.enAttente.length + ')' }),
-      T.enAttente.length ? h('ul', {}, T.enAttente.map(a => pers(a, h('span', {}, btn('Autoriser', { op: 'telegram.autoriser', id: a.id }, 'Accès ouvert', 'prim'), ' ', btn('C\'est moi, le CEO', { op: 'telegram.ceo', id: a.id }, 'CEO enregistré'), ' ', btn('Refuser', { op: 'telegram.retirer', id: a.id }, 'Refusé'))))) : h('p', { class: 'aide', text: 'Aucune.' }),
-      h('h4', { text: 'Collaborateurs autorisés (' + T.collaborateurs.length + ')' }),
-      T.collaborateurs.length ? h('ul', {}, T.collaborateurs.map(c => pers(c, btn('Retirer', { op: 'telegram.retirer', id: c.id }, 'Accès retiré')))) : h('p', { class: 'aide', text: 'Aucun.' }),
-      h('div', { class: 'barre' }, h('span', { class: 'aide', text: 'Sessions automatiques du directeur : ' + T.sessionsAujourdhui + ' aujourd\'hui, plafond par jour ' }), plaf,
-        btn2('Enregistrer', () => act({ op: 'telegram.plafond', n: Number(plaf.value) }, 'Plafond enregistré'))));
+      personnes('telegram', T, 'Une personne apparaît ici dès qu\'elle écrit au bot.'));
 
-    vider($('#v-reglages'), sources, telegram, jiraC, notion, github,
+    const S = E.slack, jB = mot('xoxb-…', 'Jeton du bot Slack'), jA = mot('xapp-…', 'Jeton de l\'app Slack');
+    const manif = h('textarea', { readonly: true, rows: 8, class: 'mono', 'aria-label': 'Manifeste de l\'app Slack', text: JSON.stringify(S.manifeste, null, 2) });
+    const slack = h('div', { class: 'carte' }, h('h3', {}, 'Slack ', etat(S.actif, S.connecte ? 'connecté' : 'actif', S.jetonBot ? 'inactif' : 'non branché')),
+      !S.disponible ? h('p', { class: 'attention', text: 'Slack demande Node 22 ou plus sur ce poste (WebSocket intégré).' }) : null,
+      h('ol', { class: 'aide' },
+        h('li', {}, 'Sur ', h('a', { href: 'https://api.slack.com/apps?new_app=1', target: '_blank', rel: 'noopener', text: 'api.slack.com/apps' }), ' : Create New App › From a manifest, choisissez votre espace, collez le manifeste ci-dessous, puis Install to Workspace.'),
+        h('li', { text: 'Collez le jeton du bot (OAuth & Permissions, xoxb-…) et un jeton d\'app (Basic Information › App-Level Tokens, droit connections:write, xapp-…). Le Siège se connecte lui-même à Slack (Socket Mode) : aucune adresse publique.' }),
+        h('li', { text: 'Activez, écrivez au bot en message direct depuis votre compte, désignez-vous comme CEO, puis autorisez chaque collaborateur qui lui écrit. Pour ajouter une consigne à une décision, répondez en fil sous la notification.' })),
+      h('details', {}, h('summary', { text: 'Manifeste de l\'app Slack' }), manif, h('div', { class: 'barre' }, btn2('Copier', () => navigator.clipboard.writeText(manif.value).then(() => toast('Manifeste copié'))))),
+      h('div', { class: 'barre' }, jB, jA, btn2('Enregistrer les jetons', () => act({ op: 'slack.jetons', bot: jB.value, app: jA.value }, 'Jetons Slack enregistrés').then(() => { jB.value = ''; jA.value = ''; })),
+        btn2('Tester', () => act({ op: 'slack.tester' }).then(r => toast('Slack joignable : ' + r.equipe + ' (bot ' + r.bot + ')')), !(S.jetonBot && S.jetonApp)),
+        btn2(S.actif ? 'Désactiver' : 'Activer', () => act({ op: 'slack.activer', oui: !S.actif }, S.actif ? 'Slack désactivé' : 'Slack activé'), !(S.jetonBot && S.jetonApp && S.disponible), S.actif ? '' : 'prim')),
+      S.equipe ? h('p', { class: 'aide', text: 'Espace Slack : ' + S.equipe }) : null,
+      personnes('slack', S, 'Une personne apparaît ici dès qu\'elle écrit au bot en message direct.'));
+
+    vider($('#v-reglages'), sources, messagerieC, telegram, slack, jiraC, notion, github,
       h('div', { class: 'carte' }, h('h3', { text: 'Siège' }), h('p', { class: 'mono muted', text: E.racine }),
         h('p', { class: 'aide', text: 'Jetons et clé privée restent sur ce poste (~/.siege, droits 600) et ne sont jamais renvoyés à la page.' })));
   }

@@ -145,3 +145,4 @@ label.champ.coche{display:flex;align-items:center;gap:8px;grid-column:1/-1}
 .fil .msg.ceo{border-left:3px solid var(--wait)}
 .carte h4{margin:14px 0 6px;font-size:13px}
 .carte ul{margin:0;padding-left:18px;display:grid;gap:6px}
+.carte details textarea{width:100%;box-sizing:border-box;font-size:12px;margin:6px 0}

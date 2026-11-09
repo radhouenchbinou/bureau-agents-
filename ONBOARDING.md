@@ -15,7 +15,7 @@ Neuf étapes, dont trois facultatives. Seules les étapes 1 à 4 et 8 sont néce
 | 4 | Brancher le backlog | Siège › Intégrations | Oui (fichiers par défaut) | Features et Bugs dans Notion, Jira ou fichiers |
 | 5 | Brancher GitHub | Siège › Intégrations | Pour pousser et fusionner | App GitHub, un jeton par rôle et par repo |
 | 6 | Droits, skills, autorisations | Siège › Droits | Relecture conseillée | Chaque agent n'a que les droits de son rôle |
-| 7 | Telegram | Siège › Intégrations | Non | Collaborateurs et notifications du CEO |
+| 7 | Telegram et/ou Slack | Siège › Intégrations | Non | Collaborateurs et notifications du CEO |
 | 8 | Premier circuit | Claude Code `/feature` | Oui | Une feature menée étape par étape |
 | 9 | Routine du CEO | Siège + GitHub + Telegram | — | Questions, exceptions, priorités, fusions |
 
@@ -116,18 +116,32 @@ action ; le réseau est limité à GitHub et Notion. Ouvrez **Siège › Droits*
 - **Contexte propre** : chaque tâche d'agent part d'un contexte neuf, et chaque étape du directeur se fait dans une
   nouvelle session ; ce qui doit survivre passe par les fichiers et la passation sur le ticket.
 
-## 7. Telegram (facultatif)
+## 7. Telegram et/ou Slack (facultatif)
 
-Vos collaborateurs écrivent au directeur sur Telegram pour signaler un bug ou demander une évolution ; ils n'ont
-jamais accès au Siège. Le directeur vous prévient aussi sur Telegram quand une décision vous revient.
+Vos collaborateurs écrivent au directeur sur Telegram ou sur Slack pour signaler un bug ou demander une évolution ; ils
+n'ont jamais accès au Siège. Le directeur vous prévient aussi, sur chaque canal où vous êtes enregistré, quand une
+décision vous revient. Les deux canaux font la même chose et partagent la même file et le même plafond.
+
+**Telegram :**
 
 1. Créez un bot avec [@BotFather](https://t.me/BotFather) (`/newbot`), collez son jeton dans **Siège › Intégrations ›
    Telegram**, **Tester**, puis **Activer**.
 2. Envoyez `/start` au bot depuis votre compte, puis cliquez **C'est moi, le CEO** dans le Siège.
 3. Chaque collaborateur envoie `/start` au bot ; vous l'**autorisez** dans le Siège. Un inconnu n'obtient jamais de
    réponse du directeur.
-4. Fixez le **plafond de sessions automatiques par jour** (50 par défaut) : chaque message lance une courte session du
-   directeur.
+
+**Slack** (Node 22 ou plus) :
+
+1. Sur [api.slack.com/apps](https://api.slack.com/apps?new_app=1) : *Create New App › From a manifest*, collez le
+   manifeste affiché dans **Siège › Intégrations › Slack**, puis *Install to Workspace*.
+2. Collez le jeton du bot (`xoxb-…`, *OAuth & Permissions*) et un jeton d'app (`xapp-…`, *Basic Information ›
+   App-Level Tokens*, droit `connections:write`), **Tester**, **Activer**. Le Siège se connecte lui-même à Slack
+   (Socket Mode) : aucune adresse publique à ouvrir.
+3. Écrivez au bot en message direct, cliquez **C'est moi, le CEO**, puis autorisez chaque collaborateur qui lui écrit.
+   Pour ajouter une consigne à une décision, répondez en fil sous la notification.
+
+Enfin, fixez le **plafond de sessions automatiques par jour** (50 par défaut, tous canaux confondus) : chaque message
+lance une courte session du directeur.
 
 Le directeur pose ses questions, fait valider un résumé au demandeur, vous transmet ce qui le mérite (évolution,
 plusieurs filiales, sécurité, argent, doute), puis crée le ticket sans rang : c'est vous qui priorisez. Suivi dans

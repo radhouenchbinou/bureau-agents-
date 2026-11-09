@@ -166,9 +166,18 @@ dans *Statuts Jira correspondants*), le Siège la fait pour que vos tableaux sui
 seulement l'étiquette : rien n'est jamais supprimé dans Jira. Une réponse du CEO écrite dans Jira est lue comme telle
 (auteur différent du compte de l'intégration). Une story étiquetée sans « Siège ID » (créée à la main) est ignorée.
 
-## Telegram : les collaborateurs écrivent au directeur, le directeur prévient le CEO
+## Telegram et Slack : les collaborateurs écrivent au directeur, le directeur prévient le CEO
 
-Option activable dans **Siège › Intégrations › Telegram**. Les collaborateurs n'ont **jamais** accès au Siège.
+Option activable dans **Siège › Intégrations**, sur Telegram, sur Slack ou les deux (mêmes fonctions, une file et un
+plafond communs). Les collaborateurs n'ont **jamais** accès au Siège.
+
+**Slack** : une app en *Socket Mode* (le Siège ouvre lui-même la connexion, aucune adresse publique ; Node 22+).
+*Create New App › From a manifest* avec le manifeste fourni dans le Siège, *Install to Workspace*, puis collez le jeton
+du bot (`xoxb-…`) et un jeton d'app (`xapp-…`, droit `connections:write`), *Tester*, *Activer*. Écrivez au bot en
+message direct, désignez-vous CEO, autorisez vos collaborateurs ; une consigne sur une décision se donne en fil sous la
+notification. Jetons dans `~/.siege/slack-*-token` (600).
+
+**Telegram** :
 
 1. Créez un bot avec [@BotFather](https://t.me/BotFather) (`/newbot`), collez son jeton (gardé dans
    `~/.siege/telegram-token`, 600), *Tester*, puis *Activer*.
@@ -189,7 +198,7 @@ décider** (que vous tranchez toujours dans le Siège, jamais depuis Telegram) e
 
 Garde-fous : 20 messages par heure et par collaborateur ; **plafond de sessions automatiques par jour** (50 par défaut,
 réglable) au-delà duquel les demandes attendent et vous êtes prévenu ; une session à la fois, 10 minutes au plus.
-Demandes et annuaire dans `~/.siege/demandes.json` et `~/.siege/telegram.json` (600), jamais dans le dépôt. Journal des
+Demandes et annuaires dans `~/.siege/demandes.json`, `telegram.json` et `slack.json` (600), jamais dans le dépôt. Journal des
 sessions : `~/.siege/directeur-demandes.log`.
 
 ## Brancher GitHub depuis le Siège

@@ -14,7 +14,7 @@ const { questionsOuvertes } = require('./backlog');
 const exceptions = require('./lib/exceptions'), parametres = require('./lib/parametres'), skills = require('./lib/skills'), droits = require('./droits');
 const fs = require('fs'), os = require('os');
 const jira = require('./lib/jira'), integrations = require('./lib/integrations'), gh = require('./lib/github');
-const tg = require('./lib/telegram'), demandes = require('./lib/demandes'), { Messagerie } = require('./lib/messagerie');
+const tg = require('./lib/telegram'), sl = require('./lib/slack'), demandes = require('./lib/demandes'), canaux = require('./lib/canaux'), { Messagerie, commun, communModifier } = require('./lib/messagerie');
 
 // Telegram : sujets dont le CEO est prévenu une fois chacun (questions d'agents, exceptions à décider)
 async function sujetsCeo() {
@@ -24,7 +24,7 @@ async function sujetsCeo() {
   return out;
 }
 const messagerie = new Messagerie({ racine: cfg.F.racine, journal: m => console.log('[telegram] ' + m), extras: sujetsCeo });
-let botTelegram = '';
+let botTelegram = '', equipeSlack = '';
 
 // Derniers événements de la garde (refus, exceptions utilisées ou terminées), du plus récent au plus ancien
 function journalGarde(n = 40) {
@@ -72,8 +72,11 @@ async function etat() {
   return {
     csrf: CSRF, genere: Date.now(), racine: cfg.F.racine,
     source: { type: s.type, jeton: s.type === 'jira' ? !!cfg.jetonJira() : !!cfg.jeton(), configure: s.type === 'notion' ? !!(s.bases && s.bases.features && s.bases.bugs) : s.type === 'jira' ? !!(s.champs && s.champs.ID) : true },
-    telegram: (() => { const t = tg.lire(); return { actif: t.actif, jeton: !!tg.jeton(), bot: botTelegram, ceo: t.ceo, collaborateurs: t.collaborateurs, enAttente: t.enAttente,
-      plafondJour: t.plafondJour || 50, sessionsAujourdhui: t.sessions[new Date().toISOString().slice(0, 10)] || 0, enCours: messagerie.enCours, file: messagerie.attente }; })(),
+    telegram: (() => { const t = tg.lire(); return { actif: t.actif, jeton: !!tg.jeton(), bot: botTelegram, ceo: t.ceo, collaborateurs: t.collaborateurs, enAttente: t.enAttente }; })(),
+    slack: (() => { const t = sl.lire(); return { actif: t.actif, jetonBot: !!sl.jetonBot(), jetonApp: !!sl.jetonApp(), disponible: sl.disponible(), equipe: equipeSlack,
+      connecte: !!(messagerie.socket && messagerie.socket.ws && messagerie.socket.ws.readyState === 1), ceo: t.ceo, collaborateurs: t.collaborateurs, enAttente: t.enAttente, manifeste: sl.MANIFESTE }; })(),
+    messagerie: (() => { const k = commun(); return { plafondJour: k.plafondJour || 50, sessionsAujourdhui: k.sessions[new Date().toISOString().slice(0, 10)] || 0,
+      enCours: messagerie.enCours, file: messagerie.attente, canauxActifs: canaux.TOUS.filter(c => c.pret()).map(c => c.libelle) }; })(),
     demandes: demandes.lire().liste.slice(-200).reverse(),
     integrations: integrations.vue({ racine: cfg.F.racine, prive: cfg.F.prive, source: s, jetonNotion: cfg.jeton(), jetonJira: cfg.jetonJira(), filiales: fil }),
     schemas: Object.fromEntries(Object.entries(COLLECTIONS).map(([n, c]) => [n, { libelle: c.libelle, champs: c.champs }])), etapes: ETAPES,
@@ -176,23 +179,40 @@ async function action(op) {
       if (op.oui && !tg.jeton()) refus('Enregistrez d\'abord le jeton du bot');
       tg.modifier(s => { s.actif = !!op.oui; }); if (op.oui) messagerie.demarrer(); return { ok: true };
     }
-    case 'telegram.ceo': case 'telegram.autoriser': {
-      const id = Number(op.id), nom = String(op.nom || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 80);
-      const p = tg.modifier(s => {
-        const v = s.enAttente.find(a => a.id === id) || s.collaborateurs.find(c => c.id === id) || (s.ceo && s.ceo.id === id ? s.ceo : null);
+    // Personnes d'un canal (Telegram : identifiant numérique ; Slack : U…) : CEO, collaborateur autorisé, retrait
+    case 'telegram.ceo': case 'telegram.autoriser': case 'slack.ceo': case 'slack.autoriser': {
+      const [nomCanal, quoi] = op.op.split('.'), c = canaux[nomCanal];
+      const id = nomCanal === 'telegram' ? Number(op.id) : String(op.id || ''), nom = String(op.nom || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 80);
+      if (nomCanal === 'slack' && !sl.ID.test(id)) refus('Identifiant Slack attendu (U…)');
+      const p = c.modifier(s => {
+        const meme = x => x && String(x.id) === String(id);
+        const v = s.enAttente.find(meme) || s.collaborateurs.find(meme) || (meme(s.ceo) ? s.ceo : null);
         if (!v) return null;
-        s.enAttente = s.enAttente.filter(a => a.id !== id);
+        s.enAttente = s.enAttente.filter(a => !meme(a));
         const pers = { id, nom: nom || v.nom, username: v.username || '', depuis: new Date().toISOString() };
-        if (op.op === 'telegram.ceo') { s.ceo = pers; s.collaborateurs = s.collaborateurs.filter(c => c.id !== id); }
-        else { if (s.ceo && s.ceo.id === id) s.ceo = null; s.collaborateurs = s.collaborateurs.filter(c => c.id !== id).concat(pers); }
+        if (quoi === 'ceo') { s.ceo = pers; s.collaborateurs = s.collaborateurs.filter(x => !meme(x)); }
+        else { if (meme(s.ceo)) s.ceo = null; s.collaborateurs = s.collaborateurs.filter(x => !meme(x)).concat(pers); }
         return pers;
       });
-      if (!p) refus('Personne inconnue : elle doit d\'abord écrire /start au bot');
-      await tg.envoyer(id, op.op === 'telegram.ceo' ? 'Vous êtes enregistré comme CEO : je vous préviendrai ici quand une décision vous revient.' : `Bonjour ${p.nom}, votre accès est ouvert. Écrivez-moi votre besoin (bug ou évolution) : je vous réponds ici.`).catch(() => {});
+      if (!p) refus(`Personne inconnue : elle doit d'abord écrire au bot ${c.libelle}`);
+      await c.envoyer(id, quoi === 'ceo' ? 'Vous êtes enregistré comme CEO : je vous préviendrai ici quand une décision vous revient.' : `Bonjour ${p.nom}, votre accès est ouvert. Écrivez-moi votre besoin (bug ou évolution) : je vous réponds ici.`).catch(() => {});
       return p;
     }
-    case 'telegram.retirer': tg.modifier(s => { const id = Number(op.id); s.collaborateurs = s.collaborateurs.filter(c => c.id !== id); s.enAttente = s.enAttente.filter(a => a.id !== id); if (s.ceo && s.ceo.id === id) s.ceo = null; }); return { ok: true };
-    case 'telegram.plafond': { const n = Number(op.n); if (!Number.isInteger(n) || n < 1 || n > 1000) refus('Plafond entre 1 et 1000 sessions par jour'); tg.modifier(s => { s.plafondJour = n; }); return { ok: true }; }
+    case 'telegram.retirer': case 'slack.retirer': {
+      const c = canaux[op.op.split('.')[0]], meme = x => x && String(x.id) === String(op.id);
+      c.modifier(s => { s.collaborateurs = s.collaborateurs.filter(x => !meme(x)); s.enAttente = s.enAttente.filter(x => !meme(x)); if (meme(s.ceo)) s.ceo = null; }); return { ok: true };
+    }
+    case 'telegram.plafond': case 'messagerie.plafond': { const n = Number(op.n); if (!Number.isInteger(n) || n < 1 || n > 1000) refus('Plafond entre 1 et 1000 sessions par jour'); communModifier(s => { s.plafondJour = n; }); return { ok: true }; }
+    // Slack (option) : app en Socket Mode, jetons du bot et de l'app
+    case 'slack.jetons': sl.enregistrerJetons(op); return { ok: true };
+    case 'slack.tester': { const r = await sl.appel('auth.test'); equipeSlack = r.team || ''; await sl.appel('apps.connections.open', {}, { app: true }); return { equipe: r.team, bot: r.user }; }
+    case 'slack.activer': {
+      if (op.oui && !sl.disponible()) refus('Slack demande Node 22 ou plus (WebSocket intégré)');
+      if (op.oui && !(sl.jetonBot() && sl.jetonApp())) refus('Enregistrez d\'abord les deux jetons (xoxb- et xapp-)');
+      sl.modifier(s => { s.actif = !!op.oui; });
+      if (op.oui) messagerie.demarrer(); else messagerie.arreterSlack();
+      return { ok: true };
+    }
     case 'demande.relancer': { const x = demandes.lire().liste.find(y => y.id === op.id); if (!x || !demandes.ouverte(x)) refus('Demande close ou introuvable'); messagerie.planifier(x.id); return { ok: true }; }
     case 'backlog.importer':
     case 'notion.importer': {
@@ -253,7 +273,7 @@ const serveur = http.createServer(async (req, res) => {
       if (!egal(req.headers['x-siege-csrf'], CSRF) || !/^application\/json/.test(req.headers['content-type'] || '')) return envoyer(403, { erreur: 'Jeton de page manquant : rechargez la page' });
       let op; try { op = JSON.parse(await corps(req)); } catch { return envoyer(400, { erreur: 'Requête illisible' }); }
       try { return envoyer(200, { ok: true, resultat: (await action(op)) || null }); }
-      catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException || e instanceof integrations.ErreurIntegration || e instanceof gh.ErreurGithub || e instanceof tg.ErreurTelegram || e instanceof demandes.ErreurDemande) return envoyer(400, { erreur: e.message }); throw e; }
+      catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException || e instanceof integrations.ErreurIntegration || e instanceof gh.ErreurGithub || e instanceof tg.ErreurTelegram || e instanceof sl.ErreurSlack || e instanceof demandes.ErreurDemande) return envoyer(400, { erreur: e.message }); throw e; }
     }
     if (req.method !== 'GET') return envoyer(405, { erreur: 'Méthode refusée' });
     const rel = u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname).replace(/^\/+/, '');
@@ -265,6 +285,6 @@ const serveur = http.createServer(async (req, res) => {
 
 if (require.main === module) {
   serveur.listen(PORT, HOST, () => console.log(`Le Siège : http://${HOST}:${PORT}/  (racine ${cfg.F.racine})`));
-  if (tg.lire().actif) messagerie.demarrer();
+  if (tg.lire().actif || sl.lire().actif) messagerie.demarrer();
 }
 module.exports = { serveur, action, etat, messagerie };
