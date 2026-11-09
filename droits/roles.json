@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_lisez_moi": "Source unique des droits de chaque agent. Tout ce qui n'est pas listé est refusé. Après modification : node siege/droits.js appliquer (met à jour outils et skills des agents). Les commandes shell sont des expressions régulières sur la commande normalisée (mots séparés par un espace, guillemets retirés). {role} est remplacé par le nom de l'agent. identites_humaines : noms réservés aux humains, qu'aucun agent ne peut porter ni utiliser comme auteur (CEO l'est toujours) ; l'identité d'un agent est imposée par la garde (siege/lib/identite.js), jamais par --auteur ni --role.",
+  "_lisez_moi": "Source unique des droits de chaque agent. Tout ce qui n'est pas listé est refusé. Après modification : node siege/droits.js appliquer (met à jour outils et skills des agents). Les commandes shell sont des expressions régulières sur la commande normalisée (mots séparés par un espace, guillemets retirés). {role} est remplacé par le nom de l'agent.",
   "commun": {
     "identites_humaines": [
       "CEO"
@@ -190,7 +190,7 @@
         "^(mkdir|touch) projets/\\S+",
         "^cd projets/\\S+$",
         "^node siege/backlog\\.js maj BUG-\\d{3} --statut (\"?En correction\"?|\"?À vérifier\"?)\\b",
-        "^node siege/github\\.js (pousser|pr) .*--role {role}( |$)",
+        "^node siege/github\\.js (pousser|pr)( |$)",
         "^(npm|npx|pnpm|yarn|node|tsc)( |$)",
         "^(mvn|\\./mvnw|gradle|\\./gradlew)( |$)",
         "^(python3?|pip3?|pytest|poetry|uv|ruff|mypy)( |$)",
@@ -225,7 +225,7 @@
         "^(mkdir|touch) projets/\\S+",
         "^cd projets/\\S+$",
         "^node siege/backlog\\.js maj BUG-\\d{3} --statut (\"?En correction\"?|\"?À vérifier\"?)\\b",
-        "^node siege/github\\.js (pousser|pr) .*--role {role}( |$)",
+        "^node siege/github\\.js (pousser|pr)( |$)",
         "^(npm|npx|pnpm|yarn|node|tsc|ng)( |$)",
         "^(python3?|pip3?)( |$)",
         "^make( |$)"
@@ -290,7 +290,7 @@
         "portfolio/decisions/*-review.md"
       ],
       "bash": [
-        "^node siege/github\\.js statut .*--contexte revue .*--role {role}( |$)",
+        "^node siege/github\\.js statut .*--contexte revue( |$)",
         "^cd projets/\\S+$"
       ],
       "web": [],
@@ -316,7 +316,7 @@
       "bash": [
         "^(pip-audit|npm audit|gitleaks detect|semgrep|bandit)\\b",
         "^python3? -m (pip_audit|bandit)\\b",
-        "^node siege/github\\.js statut .*--contexte securite .*--role {role}( |$)",
+        "^node siege/github\\.js statut .*--contexte securite( |$)",
         "^(npm audit|npx --yes? ?(audit-ci|osv-scanner))( |$)",
         "^(osv-scanner|trivy (fs|config)|grype|syft)( |$)",
         "^cd projets/\\S+$"
