@@ -40,11 +40,12 @@
       h('span', {}, h('b', { text: f.filter(x => x.statut === 'Livré').length + '/' + f.length }), 'features livrées'),
       h('span', {}, h('b', { text: b.filter(x => ['Ouvert', 'En correction', 'À vérifier'].includes(x.statut)).length }), 'bugs ouverts'),
       h('span', { class: E.questions.liste.length ? 'alerte' : '' }, h('b', { text: E.questions.liste.length }), 'question(s) pour vous'),
+      h('span', { class: enAttente().length ? 'alerte' : '' }, h('b', { text: enAttente().length }), 'exception(s) à décider'),
       h('span', {}, h('b', { text: act.length }), 'agent(s) au poste'),
       h('span', {}, 'Backlog : ', h('b', { text: E.source.type === 'notion' ? 'Notion' : 'fichiers locaux' })));
     const errs = [E.features.erreur, E.bugs.erreur, E.questions.erreur, E.activite.erreur].filter(Boolean);
     bandeau(errs.length ? [...new Set(errs)].join(' · ') : '', true);
-    ({ bureau: rendreBureau, backlog: rendreBacklog, agents: rendreAgents, reglages: rendreReglages })[vue]();
+    ({ bureau: rendreBureau, backlog: rendreBacklog, agents: rendreAgents, droits: rendreDroits, reglages: rendreReglages })[vue]();
   }
   document.querySelectorAll('.tabs button').forEach(bt => bt.addEventListener('click', () => {
     vue = bt.dataset.v; document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', x === bt));
@@ -76,7 +77,8 @@
       h('p', { class: 'aide', text: 'Les agents s\'allument quand Claude Code travaille dans le Siège. Cliquez un poste pour voir sa fiche.' }),
       h('div', { class: 'immeuble' },
         etage('direction', 'Direction', '', [
-          poste('CEO', 'Vous — CEO', null, () => { vue = 'backlog'; $('.tabs [data-v=backlog]').click(); }, q ? q + ' question(s) en attente' : 'Rien en attente'),
+          poste('CEO', 'Vous — CEO', null, () => $(`.tabs [data-v=${enAttente().length ? 'droits' : 'backlog'}]`).click(),
+            [q ? q + ' question(s)' : '', enAttente().length ? enAttente().length + ' exception(s)' : ''].filter(Boolean).join(' · ') || 'Rien en attente'),
           poste('Directeur', 'Directeur de programme', d.etat === 'absent' ? null : { etat: d.etat === 'travaille' ? 'au_poste' : 'en_attente', story: '' }, null, dirTxt)
         ]),
         etage('services', 'Services partagés du groupe', groupe.length + ' agents',
@@ -239,18 +241,100 @@
     const nouveau = !a, v = a || { nom: '', description: '', modele: 'sonnet', outils: ['Read', 'Grep', 'Glob'], consigne: '' };
     const form = h('form', { class: 'carte', onsubmit: async ev => {
       ev.preventDefault();
-      const agent = { nom: form.elements.nom.value.trim(), description: form.elements.description.value, modele: form.elements.modele.value,
-        outils: [...form.querySelectorAll('input[name=outil]:checked')].map(x => x.value), consigne: form.elements.consigne.value };
+      const agent = { nom: form.elements.nom.value.trim(), description: form.elements.description.value, modele: form.elements.modele.value, consigne: form.elements.consigne.value };
       try { await act({ op: nouveau ? 'agent.creer' : 'agent.modifier', agent }, nouveau ? 'Agent créé' : 'Agent enregistré'); fermer(); } catch {}
     } },
       h('label', { class: 'champ' }, h('span', {}, h('b', { text: 'Nom' }), ' (minuscules et tirets)'), h('input', { name: 'nom', value: v.nom, readonly: !nouveau, required: true, pattern: '[a-z][a-z0-9-]{1,40}' })),
       h('label', { class: 'champ' }, h('span', {}, h('b', { text: 'Description' }), ' — quand le directeur doit faire appel à lui'), h('textarea', { name: 'description', text: v.description, required: true })),
       h('label', { class: 'champ' }, h('span', {}, h('b', { text: 'Modèle' })), h('select', { name: 'modele' }, E.modeles.map(m => h('option', { value: m, text: m || '(par défaut)', selected: m === v.modele })))),
-      h('fieldset', { class: 'champ', style: 'border:0;padding:0;margin:0' }, h('legend', { text: 'Outils autorisés' }), h('div', { class: 'chips' }, E.outils.map(o => h('label', {}, h('input', { type: 'checkbox', name: 'outil', value: o, checked: v.outils.includes(o) }), o)))),
+      h('div', { class: 'champ' }, h('span', {}, h('b', { text: 'Droits et skills' })),
+        nouveau ? h('p', { class: 'aide', text: 'Un nouvel agent démarre en lecture seule. Ses droits (outils, dossiers, commandes, GitHub) se définissent dans droits/roles.json, ses skills dans l\'onglet Droits.' })
+          : h('div', { class: 'meta' }, v.outils.map(o => h('span', { class: 'tag', text: o })), (v.skills || []).map(s => h('span', { class: 'tag question', text: s })))),
       h('label', { class: 'champ' }, h('span', {}, h('b', { text: 'Consigne' })), h('textarea', { name: 'consigne', class: 'code', text: v.consigne, required: true })),
       h('div', { class: 'barre' }, h('button', { type: 'submit', class: 'btn prim', text: nouveau ? 'Créer l\'agent' : 'Enregistrer' }),
         !nouveau ? h('button', { type: 'button', class: 'btn dang', text: 'Supprimer', onclick: async () => { if (confirm('Supprimer l\'agent ' + v.nom + ' ? Le directeur ne pourra plus lui confier de mission.')) { await act({ op: 'agent.supprimer', nom: v.nom }, 'Agent supprimé').catch(() => {}); fermer(); } } }) : null));
     ouvrir(nouveau ? 'Nouvel agent' : 'Agent ' + v.nom, form);
+  }
+
+  // ---------- Droits ----------
+  const enAttente = () => ((E && E.droits && E.droits.exceptions) || []).filter(x => x.statut === 'demandee');
+  const STATUT_EXC = { demandee: ['attend', 'À décider'], accordee: ['', 'Accordée, à activer'], active: ['on', 'Active'], terminee: ['', 'Terminée'], refusee: ['err', 'Refusée'] };
+  const libRole = n => ((E.droits.roles.find(r => r.nom === n) || {}).libelle) || n;
+  function carteException(x) {
+    const com = h('input', { placeholder: 'Commentaire (facultatif)', 'aria-label': 'Commentaire', style: 'flex:1;min-width:180px' });
+    return h('div', { class: 'carte' },
+      h('div', { class: 'barre' }, h('span', { class: 'mono', text: x.id }), h('span', { class: 'pastille ' + STATUT_EXC[x.statut][0] }, h('i'), STATUT_EXC[x.statut][1]),
+        h('span', { class: 'tag', text: x.agent }), x.ticket ? h('span', { class: 'tag', text: x.ticket }) : null, h('span', { class: 'muted', text: depuis(x.demandee_le) })),
+      h('div', {}, h('b', { text: x.type + ' : ' }), h('span', { class: 'mono', text: x.motif })),
+      h('p', { class: 'aide', text: x.justification }),
+      x.commentaire_ceo ? h('p', { class: 'aide', text: 'Votre commentaire : ' + x.commentaire_ceo }) : null,
+      x.statut === 'demandee' ? h('div', { class: 'barre' }, com,
+        h('button', { type: 'button', class: 'btn prim', text: 'Accorder', onclick: () => act({ op: 'exception.accorder', id: x.id, commentaire: com.value }, x.id + ' accordée : le directeur peut l\'activer').catch(() => {}) }),
+        h('button', { type: 'button', class: 'btn dang', text: 'Refuser', onclick: () => act({ op: 'exception.refuser', id: x.id, commentaire: com.value }, x.id + ' refusée').catch(() => {}) })) : null,
+      ['accordee', 'active'].includes(x.statut) ? h('div', { class: 'barre' }, x.utilisations ? h('span', { class: 'aide', text: x.utilisations + ' utilisation(s)' }) : null,
+        h('button', { type: 'button', class: 'btn petit', text: 'Révoquer', onclick: () => act({ op: 'exception.terminer', id: x.id }, x.id + ' révoquée').catch(() => {}) })) : null);
+  }
+  function rendreDroits() {
+    const D = E.droits; if (D.erreur) return vider($('#v-droits'), h('p', { class: 'bandeau err', text: D.erreur }));
+    const enCours = D.exceptions.filter(x => ['demandee', 'accordee', 'active'].includes(x.statut)), passees = D.exceptions.filter(x => !enCours.includes(x)).slice(0, 10);
+    const typeA = h('select', { 'aria-label': 'Type' }, Object.entries({ domaine: 'Domaine réseau', commande: 'Commande hors bac à sable', regle: 'Commande pour un rôle' }).map(([v, t]) => h('option', { value: v, text: t })));
+    const roleA = h('select', { 'aria-label': 'Rôle' }, D.roles.filter(r => r.nom !== 'directeur').map(r => h('option', { value: r.nom, text: r.nom })));
+    const valA = h('input', { placeholder: 'pypi.org · npx playwright test · ^npx playwright test\\b', 'aria-label': 'Valeur', style: 'flex:1;min-width:220px' });
+    const motA = h('input', { placeholder: 'Motif : pourquoi en permanence', 'aria-label': 'Motif', style: 'flex:1;min-width:220px' });
+    const majRole = () => { roleA.hidden = typeA.value !== 'regle'; }; typeA.addEventListener('change', majRole); majRole();
+    vider($('#v-droits'),
+      h('p', { class: 'aide', text: 'Environnement fermé : chaque agent n\'a que les droits de son rôle ; le réseau est limité à GitHub et Notion. Vous seul accordez les exceptions et les autorisations permanentes.' }),
+      h('h2', { text: 'Exceptions' }),
+      enCours.length ? enCours.map(carteException) : h('p', { class: 'aide', text: 'Aucune exception en cours. Un agent bloqué passe par le directeur, qui vous la soumet ici.' }),
+      passees.length ? h('details', {}, h('summary', { text: 'Historique (' + passees.length + ')' }), h('div', { class: 'file' }, passees.map(carteException))) : null,
+      h('h2', { text: 'Refus récents de la garde' }),
+      D.journal.length ? h('div', { class: 'journal' }, D.journal.slice(0, 15).map(j => h('div', {}, h('span', { class: 'muted', text: depuis(j.date) }), h('span', { class: 'mono', text: j.role }),
+        h('span', {}, h('span', { class: 'pastille ' + (j.evenement === 'refus' ? 'err' : 'on') }, h('i'), { refus: 'Refus', exception_utilisee: 'Exception', exception_terminee: 'Fermée', erreur_garde: 'Erreur' }[j.evenement] || j.evenement)),
+        h('span', { text: j.raison || j.exception || j.erreur || '' })))) : h('p', { class: 'aide', text: 'Aucun refus enregistré.' }),
+      h('h2', { text: 'Autorisations permanentes hors bac à sable' }),
+      h('div', { class: 'carte' },
+        h('p', { class: 'aide', text: 'Toujours autorisés : ' + D.domainesBase.join(', ') + '. Ajoutez ici ce qui doit l\'être durablement ; .claude/settings.json est régénéré.' }),
+        D.autorisations.liste.length ? h('div', { class: 'file' }, D.autorisations.liste.map(a => h('div', { class: 'file-l' }, h('span', { class: 'n', text: '+' }), h('span', { class: 'mono', text: a.id }),
+          h('span', { text: `${a.type}${a.role ? ' (' + a.role + ')' : ''} : ${a.valeur} — ${a.motif}` }),
+          h('button', { type: 'button', class: 'btn petit dang', text: 'Retirer', onclick: () => confirm('Retirer ' + a.id + ' ?') && act({ op: 'autorisation.retirer', id: a.id }, 'Autorisation retirée').catch(() => {}) })))) : null,
+        h('div', { class: 'barre' }, typeA, roleA, valA),
+        h('div', { class: 'barre' }, motA, h('button', { type: 'button', class: 'btn prim', text: 'Autoriser', onclick: () => act({ op: 'autorisation.ajouter', type: typeA.value, role: roleA.value, valeur: valA.value, motif: motA.value }, 'Autorisation ajoutée').catch(() => {}) })),
+        h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: D.autorisations.sandbox_obligatoire, onchange: ev => act({ op: 'sandbox.obligatoire', oui: ev.target.checked }, 'Réglage enregistré').catch(() => {}) }),
+          ' Bac à sable obligatoire (Claude Code refuse de démarrer s\'il est indisponible)')),
+      h('h2', { text: 'Droits par rôle' }),
+      h('div', { class: 'agents' }, D.roles.map(r => h('div', { class: 'carte agent' },
+        h('div', { class: 'barre' }, h('h3', { text: r.nom }), h('span', { class: 'muted', text: r.libelle })),
+        h('p', {}, h('b', { text: 'Écrit dans : ' }), r.ecriture.length ? r.ecriture.join(', ') : 'rien (outils du Siège seulement)'),
+        h('p', {}, h('b', { text: 'Commandes : ' }), r.commandes + ' règle(s)'),
+        h('p', {}, h('b', { text: 'GitHub : ' }), Object.entries(r.github).map(([k, v]) => k + ' ' + v).join(', ') || 'aucun'),
+        h('div', { class: 'meta' }, r.outils.map(o => h('span', { class: 'tag', text: o }))),
+        r.nom !== 'directeur' ? h('div', { class: 'meta' }, r.skills.map(s => h('span', { class: 'tag', text: s })), r.skillsEntreprise.map(s => h('span', { class: 'tag question', text: s + ' (entreprise)' }))) : null))),
+      h('h2', { text: 'Skills' }),
+      h('div', { class: 'barre' }, h('p', { class: 'aide', text: 'Le socle est fourni avec l\'entreprise. Ajoutez vos skills (conventions, stack, métier) et choisissez les types d\'agents qui les reçoivent.' }),
+        h('button', { type: 'button', class: 'btn prim', text: 'Nouvelle skill', onclick: editeurSkill })),
+      h('div', { class: 'agents' }, D.skills.map(s => h('div', { class: 'carte agent' },
+        h('div', { class: 'barre' }, h('h3', { text: s.nom }), h('span', { class: 'tag' + (s.socle ? '' : ' question'), text: s.commune ? 'tous les agents' : s.socle ? 'socle' : 'entreprise' })),
+        h('p', { text: s.description }),
+        s.commune ? null : h('div', { class: 'chips' }, D.roles.filter(r => r.nom !== 'directeur').map(r => {
+          const base = r.skills.includes(s.nom);
+          return h('label', {}, h('input', { type: 'checkbox', checked: base || r.skillsEntreprise.includes(s.nom), disabled: base,
+            onchange: ev => act({ op: 'skill.affecter', nom: s.nom, role: r.nom, actif: ev.target.checked }, 'Skill ' + (ev.target.checked ? 'ajoutée à ' : 'retirée de ') + r.nom).catch(() => {}) }), r.nom);
+        })),
+        !s.socle ? h('div', { class: 'barre' }, h('button', { type: 'button', class: 'btn petit dang', text: 'Supprimer', onclick: () => confirm('Supprimer la skill ' + s.nom + ' ?') && act({ op: 'skill.supprimer', nom: s.nom }, 'Skill supprimée').catch(() => {}) })) : null))));
+  }
+  function editeurSkill() {
+    const form = h('form', { class: 'carte', onsubmit: async ev => {
+      ev.preventDefault();
+      const roles = [...form.querySelectorAll('input[name=role]:checked')].map(x => x.value);
+      try { await act({ op: 'skill.creer', skill: { nom: form.elements.nom.value.trim(), description: form.elements.description.value, contenu: form.elements.contenu.value, roles } }, 'Skill créée et préchargée chez ' + (roles.join(', ') || 'personne')); fermer(); } catch {}
+    } },
+      h('label', { class: 'champ' }, h('span', {}, h('b', { text: 'Nom' }), ' (minuscules et tirets, ex. conventions-api-kompta)'), h('input', { name: 'nom', required: true, pattern: '[a-z0-9][a-z0-9-]{1,63}' })),
+      h('label', { class: 'champ' }, h('span', {}, h('b', { text: 'Description' }), ' — quand l\'agent doit l\'utiliser'), h('textarea', { name: 'description', required: true })),
+      h('fieldset', { class: 'champ', style: 'border:0;padding:0;margin:0' }, h('legend', { text: 'Types d\'agents qui la reçoivent' }),
+        h('div', { class: 'chips' }, E.droits.roles.filter(r => r.nom !== 'directeur').map(r => h('label', {}, h('input', { type: 'checkbox', name: 'role', value: r.nom }), r.nom)))),
+      h('label', { class: 'champ' }, h('span', {}, h('b', { text: 'Contenu' }), ' (Markdown : méthode, conventions, exemples)'), h('textarea', { name: 'contenu', class: 'code', required: true })),
+      h('div', { class: 'barre' }, h('button', { type: 'submit', class: 'btn prim', text: 'Créer la skill' })));
+    ouvrir('Nouvelle skill', form);
   }
 
   // ---------- Réglages ----------

@@ -11,6 +11,26 @@ const { filiales } = require('./lib/registre');
 const activite = require('./lib/activite');
 const { creerBases, idDepuisLien } = require('./lib/notion');
 const { questionsOuvertes } = require('./backlog');
+const exceptions = require('./lib/exceptions'), parametres = require('./lib/parametres'), skills = require('./lib/skills'), droits = require('./droits');
+const fs = require('fs'), os = require('os');
+
+// Derniers événements de la garde (refus, exceptions utilisées ou terminées), du plus récent au plus ancien
+function journalGarde(n = 40) {
+  try {
+    const f = path.join(process.env.SIEGE_PRIVE || path.join(os.homedir(), '.siege'), 'journal-garde.jsonl');
+    const t = fs.readFileSync(f, 'utf8').trim().split('\n').slice(-n).reverse();
+    return t.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  } catch { return []; }
+}
+function vueDroits() {
+  const p = droits.politique();
+  return {
+    roles: Object.entries(p.roles).map(([nom, r]) => ({ nom, libelle: r.libelle, outils: [...new Set([...p.commun.outils_toujours, ...r.outils])], ecriture: r.ecriture,
+      commandes: [...p.commun.bash, ...r.bash].length, github: r.github, skills: [...(p.commun.skills || []), ...(r.skills || [])], skillsEntreprise: r.skills_entreprise || [] })),
+    exceptions: exceptions.lire().liste.slice().reverse(), journal: journalGarde(), autorisations: parametres.lire(cfg.F.racine),
+    domainesBase: parametres.DOMAINES_BASE, skills: skills.lister(cfg.F.racine)
+  };
+}
 
 const PORT = Number(process.env.SIEGE_PORT || 4848), HOST = '127.0.0.1';
 const PUBLIC = path.join(__dirname, 'public');
@@ -42,7 +62,8 @@ async function etat() {
     source: { type: s.type, jeton: !!cfg.jeton(), configure: s.type !== 'notion' || !!(s.bases && s.bases.features && s.bases.bugs) },
     schemas: Object.fromEntries(Object.entries(COLLECTIONS).map(([n, c]) => [n, { libelle: c.libelle, champs: c.champs }])), etapes: ETAPES,
     filiales: fil, agents: ag, rolesFiliale: ROLES_FILIALE, modeles: MODELES, outils: OUTILS,
-    features: f, bugs: b, file: file(f.elements, b.elements), activite: act, questions: await questionsEnAttente()
+    features: f, bugs: b, file: file(f.elements, b.elements), activite: act, questions: await questionsEnAttente(),
+    droits: (() => { try { return vueDroits(); } catch (e) { return { erreur: e.message, roles: [], exceptions: [], journal: [], autorisations: { liste: [] }, skills: [] }; } })()
   };
 }
 
@@ -79,9 +100,24 @@ async function action(op) {
       for (const c of changes) await src.modifier(c.id, { rang: c.rang });
       return { modifies: changes.length };
     }
-    case 'agent.creer': return agents.ecrire(op.agent || {}, { creation: true });
-    case 'agent.modifier': return agents.ecrire(op.agent || {}, { creation: false });
-    case 'agent.supprimer': return agents.supprimer(op.nom);
+    // Outils et skills d'un agent viennent de droits/roles.json : l'éditeur ne change que description, modèle, consigne.
+    // Un nouvel agent reçoit des droits minimaux (lecture seule) que le CEO élargit ensuite dans droits/roles.json.
+    case 'agent.creer': {
+      const a = op.agent || {}, r = await agents.ecrire({ ...a, outils: ['Read', 'Grep', 'Glob'], skills: [] }, { creation: true });
+      const f = path.join(cfg.F.racine, 'droits', 'roles.json'), p = JSON.parse(fs.readFileSync(f, 'utf8'));
+      if (!p.roles[r.nom]) { p.roles[r.nom] = { libelle: r.nom, outils: [], ecriture: [], bash: [], web: [], github: {}, skills: [] }; fs.writeFileSync(f + '.tmp', JSON.stringify(p, null, 2) + '\n'); fs.renameSync(f + '.tmp', f); }
+      await droits.appliquer({ silencieux: true }); return r;
+    }
+    case 'agent.modifier': {
+      const a = op.agent || {}, ex0 = (await agents.lister()).find(x => x.nom === a.nom) || refus('Agent introuvable');
+      return agents.ecrire({ ...ex0, description: a.description, modele: a.modele, consigne: a.consigne }, { creation: false });
+    }
+    case 'agent.supprimer': {
+      await agents.supprimer(op.nom);
+      const f = path.join(cfg.F.racine, 'droits', 'roles.json'), p = JSON.parse(fs.readFileSync(f, 'utf8'));
+      if (p.roles[op.nom] && op.nom !== 'directeur') { delete p.roles[op.nom]; fs.writeFileSync(f + '.tmp', JSON.stringify(p, null, 2) + '\n'); fs.renameSync(f + '.tmp', f); }
+      return { ok: true };
+    }
     case 'notion.jeton': await cfg.enregistrerJeton(op.jeton); return { ok: true };
     case 'notion.init': {
       const page = idDepuisLien(op.page) || refus('Collez l\'URL d\'une page Notion partagée avec l\'intégration');
@@ -101,6 +137,16 @@ async function action(op) {
       return bilan;
     }
     case 'source.fichier': await cfg.ecrireSource({ type: 'fichier' }); return { ok: true };
+    // Décisions réservées au CEO : seul ce serveur local (ou un humain en terminal) peut les prendre
+    case 'exception.accorder': return exceptions.decider(String(op.id || ''), true, op.commentaire);
+    case 'exception.refuser': return exceptions.decider(String(op.id || ''), false, op.commentaire);
+    case 'exception.terminer': return exceptions.terminer(String(op.id || ''), 'terminée par le CEO');
+    case 'autorisation.ajouter': { const r = parametres.ajouter(cfg.F.racine, op, Object.keys(droits.politique().roles)); return r; }
+    case 'autorisation.retirer': parametres.retirer(cfg.F.racine, String(op.id || '')); return { ok: true };
+    case 'sandbox.obligatoire': parametres.sandboxObligatoire(cfg.F.racine, !!op.oui); return { ok: true };
+    case 'skill.creer': skills.creer(cfg.F.racine, op.skill || {}); await droits.appliquer({ silencieux: true }); return { ok: true };
+    case 'skill.affecter': skills.affecter(cfg.F.racine, op); await droits.appliquer({ silencieux: true }); return { ok: true };
+    case 'skill.supprimer': skills.supprimer(cfg.F.racine, op.nom); await droits.appliquer({ silencieux: true }); return { ok: true };
     case 'lancer': {
       const id = String(op.id || '');
       if (/^BUG-\d{3}$/.test(id)) return lancer('/corriger ' + id);
@@ -139,7 +185,7 @@ const serveur = http.createServer(async (req, res) => {
       if (!egal(req.headers['x-siege-csrf'], CSRF) || !/^application\/json/.test(req.headers['content-type'] || '')) return envoyer(403, { erreur: 'Jeton de page manquant : rechargez la page' });
       let op; try { op = JSON.parse(await corps(req)); } catch { return envoyer(400, { erreur: 'Requête illisible' }); }
       try { return envoyer(200, { ok: true, resultat: (await action(op)) || null }); }
-      catch (e) { if (e instanceof ErreurBacklog) return envoyer(400, { erreur: e.message }); throw e; }
+      catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException) return envoyer(400, { erreur: e.message }); throw e; }
     }
     if (req.method !== 'GET') return envoyer(405, { erreur: 'Méthode refusée' });
     const rel = u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname).replace(/^\/+/, '');

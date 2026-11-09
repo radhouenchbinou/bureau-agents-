@@ -32,14 +32,15 @@ async function ecarts() {
   return out;
 }
 
-async function appliquer() {
+async function appliquer({ silencieux = false } = {}) {
   const p = politique(), agents = new Agents(path.join(RACINE, '.claude', 'agents'));
   for (const a of await agents.lister()) {
     if (!p.roles[a.nom]) continue;
     const e = attendu(p, a.nom);
     await agents.ecrire({ ...a, outils: e.outils, skills: e.skills }, { creation: false });
-    console.log(`${a.nom.padEnd(16)} outils: ${e.outils.join(', ')}\n${''.padEnd(16)} skills: ${e.skills.join(', ')}`);
+    if (!silencieux) console.log(`${a.nom.padEnd(16)} outils: ${e.outils.join(', ')}\n${''.padEnd(16)} skills: ${e.skills.join(', ')}`);
   }
+  require('./lib/parametres').generer(RACINE);
 }
 
 function matrice() {
@@ -55,10 +56,10 @@ function matrice() {
 }
 
 const cmd = process.argv[2];
-(async () => {
-  if (cmd === 'appliquer') { await appliquer(); require('./lib/parametres').generer(RACINE); console.log('\n.claude/settings.json régénéré (garde, bac à sable, réseau GitHub + Notion).'); const e = await ecarts(); if (e.length) { console.error('\nÉcarts restants :\n- ' + e.join('\n- ')); process.exit(1); } return; }
+if (require.main === module) (async () => {
+  if (cmd === 'appliquer') { await appliquer(); console.log('\n.claude/settings.json régénéré (garde, bac à sable, réseau GitHub + Notion).'); const e = await ecarts(); if (e.length) { console.error('\nÉcarts restants :\n- ' + e.join('\n- ')); process.exit(1); } return; }
   if (cmd === 'verifier') { const e = await ecarts(); if (e.length) { console.log('Écarts :\n- ' + e.join('\n- ')); process.exit(1); } console.log('Agents conformes à droits/roles.json.'); return; }
   if (cmd === 'matrice') return matrice();
   console.log('Usage : node siege/droits.js verifier | appliquer | matrice');
 })().catch(e => { console.error('Erreur : ' + e.message); process.exit(1); });
-module.exports = { ecarts, attendu };
+module.exports = { ecarts, attendu, appliquer, politique, skillsPresentes };

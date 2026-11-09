@@ -13,8 +13,9 @@
    manuel.
 7. Aucun secret en dur (mots de passe, clés, tokens) : variables d'environnement ou
    configuration externe.
-8. Interdit : `git push`, merge, suppression de branche, déploiement. Un commit local sur la
-   branche `feature/<ID>` est attendu en fin d'étape.
+8. Commit local sur `feature/<ID>` en fin d'étape (skill `branche-et-commit`). Pousser et ouvrir la PR
+   seulement si le directeur le demande, et uniquement par `node siege/github.js` ; jamais de `git push`
+   direct, de fusion, de suppression de branche ni de déploiement.
 9. Pour un bug : écris d'abord un test qui reproduit l'anomalie, corrige, puis passe le bug
    « À vérifier » (`maj BUG-xxx --statut "À vérifier" --corrige-par <toi>`).
 10. Laisse un commentaire de suivi sur le ticket (`commenter <ID> --auteur <toi> --texte "…"`).

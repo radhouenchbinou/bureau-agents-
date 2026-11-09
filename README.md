@@ -19,7 +19,10 @@ Vous (CEO) ── valide chaque étape, répond aux questions dans Notion
 |---|---|
 | `CLAUDE.md` | Le règlement du siège : rôle du directeur, règles d'orchestration, backlog |
 | `.claude/agents/` | Les 9 agents (rôles génériques, un fichier `.md` chacun) |
+| `.claude/skills/` | Les skills du socle (une par méthode de travail) et celles de votre entreprise |
 | `.claude/commands/` | `/feature`, `/corriger`, `/standup`, `/audit-secu`, `/nouvelle-filiale`, `/notion-init` |
+| `.claude/settings.json` | Généré : garde, bac à sable, réseau limité à GitHub et Notion |
+| `droits/` | `roles.json` (droits et skills de chaque rôle), `autorisations.json` (décisions du CEO) |
 | `process/` | Le circuit d'une feature (10 étapes, portes de validation) et la méthode de chaque rôle |
 | `templates/` | Fiche de filiale, ADR |
 | `portfolio/` | Registre des filiales, contrats d'interface entre filiales, décisions de groupe, backlog local |
@@ -41,9 +44,13 @@ Les rôles d'une filiale sont **génériques** : les mêmes agents servent toute
 
 ```bash
 git clone <ce repo> mon-siege && cd mon-siege
-node siege/server.js          # le Siège sur http://127.0.0.1:4848
-claude                        # dans un autre terminal : le directeur de programme
+node siege/droits.js appliquer   # droits et skills appliqués aux agents, settings.json généré
+node siege/server.js             # le Siège sur http://127.0.0.1:4848
+claude                           # dans un autre terminal : le directeur de programme
 ```
+
+Au premier lancement, Claude Code demande d'approuver le dossier (confiance de l'espace de travail) :
+acceptez, sinon la garde n'est pas chargée.
 
 Le Siège n'écoute que sur votre machine. Il lit l'activité de Claude Code dans `~/.claude` (lecture seule) :
 les agents « s'allument » à leur poste quand une mission leur est confiée.
@@ -135,6 +142,101 @@ L'équipe est autonome sur Notion : c'est elle qui crée les bases et les fait v
 Pour revenir aux fichiers locaux : Siège › Réglages › *Revenir aux fichiers locaux* (Notion n'est pas
 modifié).
 
+## Environnement fermé : droits, exceptions, autorisations
+
+Chaque agent n'a que les droits de son métier, définis dans **`droits/roles.json`** (source unique) :
+outils, dossiers où il écrit, commandes shell, sous-commandes du backlog, droits GitHub, skills.
+
+| Rôle | Écrit dans | Peut notamment | GitHub |
+|---|---|---|---|
+| directeur | rien | déléguer, tenir le backlog, demander et activer les exceptions | — |
+| product-owner | `docs/backlog/` | créer et mettre à jour des features | — |
+| architecte | `docs/adr/`, `portfolio/interfaces.md`, `portfolio/decisions/` | — | lecture |
+| dev-backend / dev-frontend | `projets/**` | tests, build, git local, pousser `feature/…` `fix/…`, ouvrir une PR | contenu + PR |
+| qa | `tests/`, `docs/rapports/`, `docs/backlog/` | lancer les tests, créer et suivre des bugs | lecture |
+| reviewer | `docs/rapports/` | lire les diffs, poser le feu `agents/revue` | lecture + feux |
+| rssi-devsecops | `docs/rapports/` | outils d'audit, poser le feu `agents/securite` | lecture + feux + alertes |
+| devops | CI, `deploy/`, Dockerfile, unités systemd | `docker build`, fusionner après validations | contenu, PR, workflows |
+| tech-writer | `docs/site/` | — | lecture |
+
+Trois niveaux de protection :
+
+1. **La garde** (`siege/garde.js`, hook `PreToolUse` de Claude Code) contrôle chaque action de chaque agent
+   avant exécution, avec son rôle. Tout ce qui n'est pas listé est refusé. Personne n'écrit dans `droits/`,
+   `.claude/`, `siege/`, les fichiers du backlog, les `CLAUDE.md` ; personne ne lit les secrets.
+2. **Le bac à sable** de Claude Code (`sandbox` dans `.claude/settings.json`) isole au niveau du système
+   chaque commande shell et ses sous-processus : réseau limité à **GitHub et Notion**, dossiers protégés
+   en écriture, secrets illisibles. Sur Linux il faut `bubblewrap` et `socat` (`sudo apt install
+   bubblewrap socat`) ; sur macOS rien à installer.
+3. **GitHub** : jetons d'une heure limités au repo et au rôle, `main` protégée.
+
+`.claude/settings.json` est **généré** (`node siege/droits.js appliquer`) : ne le modifiez pas à la main.
+
+### Exceptions
+
+Un agent bloqué pour une action vraiment nécessaire ne contourne pas :
+
+1. il s'arrête et remonte au **directeur** une demande justifiée (type, action exacte, pourquoi) ;
+2. le directeur l'enregistre (`node siege/exception.js demander …`) et vous prévient ;
+3. **vous** accordez ou refusez dans le Siège › **Droits** (ou `node siege/exception.js accorder EXC-001`
+   dans votre terminal) — aucun agent, directeur compris, ne peut accorder une exception ;
+4. le directeur l'active et relance l'agent ;
+5. elle se **ferme automatiquement** quand l'agent termine cette tâche. Vous pouvez la révoquer avant.
+
+Chaque refus et chaque usage d'exception est journalisé (`~/.siege/journal-garde.jsonl`, visible dans
+Droits).
+
+### Autorisations permanentes
+
+Ce qui doit être autorisé durablement (un domaine comme `pypi.org`, une commande qui doit tourner hors
+bac à sable, une commande permanente pour un rôle) s'ajoute et se retire **par vous seul** dans le Siège
+› Droits, avec un motif. Les réglages sont régénérés aussitôt.
+
+## Skills
+
+Chaque agent précharge des **skills** (méthodes de travail) selon son rôle :
+
+| Rôle | Skills du socle |
+|---|---|
+| tous | `backlog-siege`, `demander-une-exception` |
+| product-owner | `ecrire-une-user-story` |
+| architecte | `rediger-un-adr`, `ecrire-un-contrat-d-interface` |
+| dev-backend | `tdd-et-changement-minimal`, `branche-et-commit` |
+| dev-frontend | + `interface-accessible` |
+| qa | `plan-de-tests`, `remonter-un-bug` |
+| reviewer | `revue-de-code` |
+| rssi-devsecops | `audit-securite`, `detection-de-secrets` |
+| devops | `pipeline-ci-securise`, `fusion-apres-validations` |
+| tech-writer | `documentation-html` |
+
+**Skills de votre entreprise** : dans le Siège › Droits › *Nouvelle skill*, écrivez vos conventions (stack,
+architecture maison, règles métier, outils) et cochez les types d'agents qui la reçoivent. Elle est
+enregistrée dans `.claude/skills/<nom>/SKILL.md` et ajoutée à `skills_entreprise` du rôle dans
+`droits/roles.json`. Exemples : `conventions-spring-kompta` pour les devs, `regles-comptables` pour le PO
+et le QA, `checklist-rgpd` pour le RSSI.
+
+## GitHub : une App, un jeton par rôle
+
+Les agents agissent au nom d'une **App GitHub** de votre entreprise. Pour chaque action, le Siège obtient
+un jeton d'une heure limité **au seul repo de la filiale** et **aux seules permissions du rôle** ; les
+agents ne voient jamais ni la clé ni le jeton.
+
+1. Créez une App sur <https://github.com/settings/apps/new> (ou dans votre organisation) : pas de webhook ;
+   permissions de repository : *Contents* lecture-écriture, *Pull requests* lecture-écriture,
+   *Commit statuses* lecture-écriture, *Workflows* lecture-écriture, *Actions* lecture,
+   *Code scanning alerts* lecture, *Metadata* lecture.
+2. Générez une clé privée et placez-la dans `~/.siege/github-app.pem` (`chmod 600`).
+3. Installez l'App sur les repos de vos projets uniquement ; notez l'*installation id* (dans l'URL de la
+   page d'installation).
+4. Copiez `portfolio/github.json.exemple` en `portfolio/github.json` : `app_id`, `installation_id` et, pour
+   chaque repo local, son repo GitHub.
+5. Protégez `main` sur chaque repo : pull request obligatoire avec **1 approbation**, feux requis
+   `agents/revue` et `agents/securite` (+ votre CI).
+
+Le circuit sur GitHub : le dev pousse `feature/<ID>` et ouvre la PR ; le reviewer et le RSSI posent leurs
+feux ; **vous approuvez la PR** ; le devops fusionne (`node siege/github.js fusionner`), l'outil refusant
+s'il manque votre approbation ou un feu vert.
+
 ## Le circuit d'une feature
 
 | # | Étape | Agent | Livrable |
@@ -163,7 +265,9 @@ sans votre accord. Variantes : circuit court, ticket de groupe, correction de bu
 - **Backlog** : file de travail avec bouton *Lancer*, questions des agents, tableaux Features / Bugs en
   colonnes par statut ; glisser une carte change son statut ou son rang ; fiche ticket avec fil de
   commentaires et réponse du CEO.
-- **Agents** : créer, modifier (description, modèle, outils, consigne), supprimer.
+- **Agents** : créer, modifier (description, modèle, consigne), supprimer.
+- **Droits** : exceptions à accorder ou refuser, refus récents de la garde, autorisations permanentes,
+  droits par rôle, skills (socle et entreprise) par type d'agent.
 - **Réglages** : source du backlog et branchement Notion.
 
 Sécurité : écoute sur 127.0.0.1 uniquement, hôte vérifié (anti DNS rebinding), modifications en JSON avec

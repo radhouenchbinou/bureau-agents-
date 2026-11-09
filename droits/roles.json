@@ -146,7 +146,8 @@
       "skills": [
         "tdd-et-changement-minimal",
         "branche-et-commit"
-      ]
+      ],
+      "skills_entreprise": []
     },
     "dev-frontend": {
       "libelle": "Développeur frontend",
@@ -209,7 +210,8 @@
       "skills": [
         "plan-de-tests",
         "remonter-un-bug"
-      ]
+      ],
+      "skills_entreprise": []
     },
     "reviewer": {
       "libelle": "Relecteur de code",
