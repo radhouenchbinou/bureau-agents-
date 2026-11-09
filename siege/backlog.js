@@ -17,6 +17,8 @@ async function questionsOuvertes() {
   }
   return out;
 }
+const { options, ErreurSiege } = require('./lib/options');
+const identite = require('./lib/identite');
 const { creerBases, idDepuisLien } = require('./lib/notion');
 const jira = require('./lib/jira');
 const { filiales } = require('./lib/registre');
@@ -50,14 +52,6 @@ Notion
   importer                              copie les tickets locaux (portfolio/*.json) vers Notion, sans doublon
 `;
 
-function options(args) {
-  const o = {}, reste = [];
-  for (let i = 0; i < args.length; i++) {
-    if (args[i].startsWith('--')) { const k = args[i].slice(2).replace(/-/g, '_'); o[k] = args[i + 1] !== undefined && !args[i + 1].startsWith('--') ? args[++i] : ''; }
-    else reste.push(args[i]);
-  }
-  return { o, reste };
-}
 const collectionDe = id => /^BUG-/.test(id) ? 'bugs' : 'features';
 const aff = e => [e.rang ? '#' + e.rang : '  -', e.id, '[' + e.statut + ']', e.gravite ? '(' + e.gravite + ')' : '', e.filiale ? '· ' + e.filiale : '', '—', e.titre].filter(Boolean).join(' ');
 
@@ -69,6 +63,7 @@ async function prefixeDe(nom) {
 
 async function main(argv) {
   const [cmd, ...args] = argv, { o, reste } = options(args);
+  const acteur = identite.resoudre({ outil: 'backlog', args: argv });      // agent : rôle imposé par la garde ; humain : usage actuel
   if ('pr' in o) throw new ErreurBacklog('Le champ PR est tenu par node siege/github.js pr --ticket <ID> (jamais à la main)');
   switch (cmd) {
     case undefined: case 'aide': case '--help': console.log(AIDE); return;
@@ -123,7 +118,10 @@ async function main(argv) {
     case 'supprimer': { await cfg.source(collectionDe(reste[0])).supprimer(reste[0]); console.log('Supprimé : ' + reste[0]); return; }
     case 'commenter': {
       const id = reste[0]; if (!id) throw new ErreurBacklog('commenter <ID> --auteur <agent> --texte "…" [--question]');
-      const c = await cfg.source(collectionDe(id)).commenter(id, { auteur: o.auteur || 'CEO', type: 'question' in o ? 'question' : o.auteur && o.auteur !== 'CEO' ? 'suivi' : 'reponse', texte: o.texte });
+      // Agent : auteur = rôle imposé (jamais `reponse`, réservée au canal humain) ; humain : logique d'origine
+      const auteur = acteur.humain ? o.auteur || 'CEO' : identite.imposer(acteur, o.auteur, { outil: 'backlog', sous_commande: 'commenter' });
+      const type = 'question' in o ? 'question' : !acteur.humain || (o.auteur && o.auteur !== 'CEO') ? 'suivi' : 'reponse';
+      const c = await cfg.source(collectionDe(id)).commenter(id, { auteur, type, texte: o.texte });
       console.log('Commentaire ajouté sur ' + id + ' : [' + c.type + '] ' + c.texte); return;
     }
     case 'commentaires': {
@@ -173,5 +171,5 @@ async function main(argv) {
   }
 }
 
-if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurBacklog ? 'Erreur : ' + e.message : e); process.exit(1); });
+if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurBacklog || e instanceof ErreurSiege ? 'Erreur : ' + e.message : e); process.exit(1); });
 module.exports = { main, questionsOuvertes, ACTIFS };

@@ -1,7 +1,10 @@
 {
   "version": 1,
-  "_lisez_moi": "Source unique des droits de chaque agent. Tout ce qui n'est pas listé est refusé. Après modification : node siege/droits.js appliquer (met à jour outils et skills des agents). Les commandes shell sont des expressions régulières sur la commande normalisée (mots séparés par un espace, guillemets retirés). {role} est remplacé par le nom de l'agent.",
+  "_lisez_moi": "Source unique des droits de chaque agent. Tout ce qui n'est pas listé est refusé. Après modification : node siege/droits.js appliquer (met à jour outils et skills des agents). Les commandes shell sont des expressions régulières sur la commande normalisée (mots séparés par un espace, guillemets retirés). {role} est remplacé par le nom de l'agent. identites_humaines : noms réservés aux humains, qu'aucun agent ne peut porter ni utiliser comme auteur (CEO l'est toujours) ; l'identité d'un agent est imposée par la garde (siege/lib/identite.js), jamais par --auteur ni --role.",
   "commun": {
+    "identites_humaines": [
+      "CEO"
+    ],
     "lecture_interdite": [
       "~/.siege/**",
       "~/.ssh/**",
@@ -26,7 +29,7 @@
     ],
     "bash": [
       "^node siege/backlog\\.js (aide|source|file|liste|voir|commentaires|questions)\\b",
-      "^node siege/backlog\\.js commenter \\S+ .*--auteur {role}( |$)",
+      "^node siege/backlog\\.js commenter (([A-Z]{3}|BUG)-\\d{3})( |$)",
       "^node siege/exception\\.js (liste|voir)\\b",
       "^git( -C \\S+)? (status|log|diff|show|branch|rev-parse|ls-files)( |$)"
     ],

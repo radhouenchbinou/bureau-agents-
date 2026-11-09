@@ -38,6 +38,7 @@ function settings(racine) {
   };
   return {
     _genere_par: 'node siege/droits.js — ne pas modifier à la main : Siège › Droits',
+    env: { SIEGE_CONTEXTE: 'agent' },   // marqueur d'appel d'agent : l'identité est alors imposée par la garde (EIA-001)
     permissions: {
       deny: ['Read(~/.siege/**)', 'Read(~/.ssh/**)', 'Read(~/.aws/**)', 'Read(~/.config/gh/**)'],   // écriture dans droits/, .claude/, siege/ : refusée par la garde à tous les rôles sauf la session mainteneur
       allow: ['Bash(node siege/backlog.js:*)']

@@ -8,7 +8,9 @@
 //  - ni jeton GitHub ni accès au backlog pour l'agent : la passation est inscrite sur le ticket par cet outil, et le
 //    push (facultatif, --pousser) passe par node siege/github.js avec le jeton du rôle.
 'use strict';
-const fs = require('fs'), path = require('path'), os = require('os'), { spawn, execFileSync } = require('child_process');
+const fs = require('fs'), path = require('path'), os = require('os'), { spawn } = require('child_process');
+const { options, ErreurSiege } = require('./lib/options');
+const identite = require('./lib/identite');
 const moteurs = require('./lib/moteurs'), copilote = require('./lib/copilote'), { filiales } = require('./lib/registre'), cfg = require('./lib/config');
 
 const RACINE = process.env.SIEGE_RACINE || path.resolve(__dirname, '..');
@@ -24,7 +26,6 @@ const AIDE = `Agents d'un autre moteur — usage : node siege/agent.js <commande
 `;
 class ErreurAgent extends Error {}
 const refus = m => { throw new ErreurAgent(m); };
-const opts = a => { const o = {}; for (let i = 0; i < a.length; i++) if (a[i].startsWith('--')) o[a[i].slice(2)] = a[i + 1] !== undefined && !a[i + 1].startsWith('--') ? a[++i] : ''; return o; };
 
 function consigne({ role, filiale, ticket, etape, mission, moteur }) {
   const defRole = (() => { try { return fs.readFileSync(path.join(RACINE, '.claude', 'agents', role + '.md'), 'utf8').replace(/^---[\s\S]*?---\s*/, ''); } catch { return ''; } })();
@@ -117,14 +118,16 @@ async function terminer({ m, mod, o, f, duree, code, passation }) {
   await cfg.source(n).commenter(o.ticket, { auteur: o.role, texte: `Passation (${m.libelle} ${mod.id}, ${duree} s) · ${passation.replace(/\s+/g, ' ').slice(0, 1800) || '(aucun message)'}` });
   let pousse = '';
   if (o.pousser) {
-    try { pousse = execFileSync(process.execPath, [path.join(__dirname, 'github.js'), 'pousser', '--role', o.role, '--filiale', f.nom, '--branche', o.pousser], { cwd: RACINE, encoding: 'utf8' }).trim(); }
-    catch (e) { pousse = '⚠ push impossible : ' + String(e.stderr || e.message).trim().split('\n').pop(); }
+    // En processus (identité = rôle lancé, limité à ROLES) : un sous-processus de github.js serait refusé faute d'entrée d'identité
+    try { pousse = await require('./github').pousserBranche({ racine: RACINE, role: o.role, filiale: f.nom, branche: o.pousser }); }
+    catch (e) { pousse = '⚠ push impossible : ' + String(e.message).trim().split('\n').pop(); }
   }
   return { moteur: m.libelle, modele: mod.id, duree, code, passation, pousse };
 }
 
 async function main(argv) {
-  const [cmd, ...a] = argv, o = opts(a);
+  const [cmd, ...a] = argv, { o } = options(a);
+  identite.resoudre({ outil: 'agent', args: argv });
   if (!cmd || cmd === 'aide') return console.log(AIDE);
   if (cmd === 'moteurs') {
     for (const m of await moteurs.detecter({ forcer: 'actualiser' in o }))
@@ -138,5 +141,5 @@ async function main(argv) {
   }
   refus('Commande inconnue : ' + cmd + '\n\n' + AIDE);
 }
-if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurAgent || e instanceof moteurs.ErreurMoteur || e instanceof copilote.ErreurCopilot || e.name === 'ErreurBacklog' ? 'Erreur : ' + e.message : e); process.exit(1); });
+if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurAgent || e instanceof ErreurSiege || e instanceof moteurs.ErreurMoteur || e instanceof copilote.ErreurCopilot || e.name === 'ErreurBacklog' ? 'Erreur : ' + e.message : e); process.exit(1); });
 module.exports = { main, lancer, consigne, ROLES };

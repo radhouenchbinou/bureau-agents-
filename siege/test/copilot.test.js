@@ -1,4 +1,5 @@
 'use strict';
+require('./_humain');
 // GitHub Copilot CLI : connexion (github.com / ghe.com, jeton fin), agents générés avec la garde en hook, lancement d'un
 // agent Copilot par node siege/agent.js (faux copilot), garde au format Copilot (powershell, path, SIEGE_ROLE).
 const test = require('node:test'), assert = require('node:assert'), fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
