@@ -16,6 +16,7 @@ const fs = require('fs'), os = require('os');
 const jira = require('./lib/jira'), integrations = require('./lib/integrations'), gh = require('./lib/github');
 const moteurs = require('./lib/moteurs'), copilote = require('./lib/copilote');
 const tm = require('./lib/teams');
+const redaction = require('./lib/redaction');
 const tg = require('./lib/telegram'), sl = require('./lib/slack'), demandes = require('./lib/demandes'), canaux = require('./lib/canaux'), { Messagerie, commun, communModifier } = require('./lib/messagerie');
 
 // Telegram : sujets dont le CEO est prévenu une fois chacun (questions d'agents, exceptions à décider)
@@ -26,6 +27,13 @@ async function sujetsCeo() {
   return out;
 }
 const messagerie = new Messagerie({ racine: cfg.F.racine, journal: m => console.log('[telegram] ' + m), extras: sujetsCeo });
+// Rédaction de tickets par l'IA (page Backlog) : contexte = filiales + tickets non terminés
+const redacteur = new redaction.Redacteur({ racine: cfg.F.racine, journal: m => console.log('[rédaction] ' + m), contexte: async () => {
+  const [fil, f, b] = await Promise.all([filiales(cfg.F.filiales), lireCollection('features'), lireCollection('bugs')]);
+  const tickets = [...f.elements.filter(x => x.statut !== 'Livré'), ...b.elements.filter(x => !['Fermé', 'Rejeté'].includes(x.statut))].slice(0, 150)
+    .map(x => ({ id: x.id, statut: x.statut, filiale: x.filiale, titre: x.titre }));
+  return { filiales: fil.map(x => ({ nom: x.nom, prefixe: x.prefixe, dossier: x.dossier })), tickets };
+} });
 let botTelegram = '', equipeSlack = '', connexionTeams = null;   // connexion Teams en cours : { code, url, etat }
 
 // Derniers événements de la garde (refus, exceptions utilisées ou terminées), du plus récent au plus ancien
@@ -82,6 +90,7 @@ async function etat() {
     messagerie: (() => { const k = commun(); return { plafondJour: k.plafondJour || 50, sessionsAujourdhui: k.sessions[new Date().toISOString().slice(0, 10)] || 0,
       enCours: messagerie.enCours, file: messagerie.attente, canauxActifs: canaux.TOUS.filter(c => c.pret()).map(c => c.libelle) }; })(),
     demandes: demandes.lire().liste.slice(-200).reverse(),
+    redactions: (() => { const l = redaction.lire().liste; return [...l.filter(redaction.OUVERTE), ...l.filter(x => !redaction.OUVERTE(x)).slice(-5)].reverse(); })(),
     integrations: integrations.vue({ racine: cfg.F.racine, prive: cfg.F.prive, source: s, jetonNotion: cfg.jeton(), jetonJira: cfg.jetonJira(), filiales: fil }),
     schemas: Object.fromEntries(Object.entries(COLLECTIONS).map(([n, c]) => [n, { libelle: c.libelle, champs: c.champs }])), etapes: ETAPES,
     filiales: fil, agents: ag, rolesFiliale: ROLES_FILIALE, outils: OUTILS,
@@ -116,6 +125,20 @@ async function action(op) {
       const fil = (await filiales(cfg.F.filiales)).find(f => f.nom === op.ticket.filiale) || refus('Choisissez une filiale');
       const src = cfg.source(n), id = prochainId(n, await src.lister(), fil.prefixe);
       return src.creer({ ...sansAuto(n, op.ticket), id });
+    }
+    // Demande en langage courant → proposition rédigée par l'IA → validation du CEO → ticket
+    case 'redaction.demander': { const x = redaction.demander(op.texte); redacteur.suivant(); return x; }
+    case 'redaction.corriger': { const x = redaction.corriger(op.id, op.remarque); redacteur.suivant(); return x; }
+    case 'redaction.abandonner': return redaction.abandonner(op.id);
+    case 'redaction.valider': {
+      const x = redaction.lire().liste.find(y => y.id === op.id) || refus('Rédaction introuvable');
+      if (x.statut !== 'À valider') refus(`${x.id} est « ${x.statut} »`);
+      const fil = await filiales(cfg.F.filiales), { collection, champs } = redaction.propositionValidee(op.proposition, fil.map(f => f.nom));
+      const f = fil.find(y => y.nom === champs.filiale), src = cfg.source(collection), id = prochainId(collection, await src.lister(), f.prefixe);
+      const t = await src.creer({ ...champs, id });
+      await src.commenter(t.id, { auteur: 'directeur', type: 'suivi', texte: `Ticket rédigé par l'IA à partir de la demande ${x.id} du CEO, relu et validé par le CEO. Demande d'origine : « ${x.demande.slice(0, 1500)} »` }).catch(() => {});
+      redaction.marquerCreee(x.id, t.id);
+      return { id: t.id, collection };
     }
     case 'ticket.modifier': if (!COLLECTIONS[n]) refus('Collection inconnue'); return cfg.source(n).modifier(op.id, sansAuto(n, op.champs || {}));
     case 'ticket.supprimer': if (!COLLECTIONS[n]) refus('Collection inconnue'); return cfg.source(n).supprimer(op.id);
@@ -311,7 +334,7 @@ const serveur = http.createServer(async (req, res) => {
       if (!egal(req.headers['x-siege-csrf'], CSRF) || !/^application\/json/.test(req.headers['content-type'] || '')) return envoyer(403, { erreur: 'Jeton de page manquant : rechargez la page' });
       let op; try { op = JSON.parse(await corps(req)); } catch { return envoyer(400, { erreur: 'Requête illisible' }); }
       try { return envoyer(200, { ok: true, resultat: (await action(op)) || null }); }
-      catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException || e instanceof integrations.ErreurIntegration || e instanceof gh.ErreurGithub || e instanceof tg.ErreurTelegram || e instanceof sl.ErreurSlack || e instanceof tm.ErreurTeams || e instanceof demandes.ErreurDemande || e instanceof moteurs.ErreurMoteur || e instanceof copilote.ErreurCopilot) return envoyer(400, { erreur: e.message }); throw e; }
+      catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException || e instanceof integrations.ErreurIntegration || e instanceof gh.ErreurGithub || e instanceof tg.ErreurTelegram || e instanceof sl.ErreurSlack || e instanceof tm.ErreurTeams || e instanceof demandes.ErreurDemande || e instanceof moteurs.ErreurMoteur || e instanceof copilote.ErreurCopilot || e instanceof redaction.ErreurRedaction) return envoyer(400, { erreur: e.message }); throw e; }
     }
     if (req.method !== 'GET') return envoyer(405, { erreur: 'Méthode refusée' });
     const rel = u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname).replace(/^\/+/, '');
@@ -322,7 +345,7 @@ const serveur = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  serveur.listen(PORT, HOST, () => console.log(`Le Siège : http://${HOST}:${PORT}/  (racine ${cfg.F.racine})`));
+  serveur.listen(PORT, HOST, () => { console.log(`Le Siège : http://${HOST}:${PORT}/  (racine ${cfg.F.racine})`); redacteur.reprendre(); });
   if (tg.lire().actif || sl.lire().actif || tm.lire().actif) messagerie.demarrer();
 }
 module.exports = { serveur, action, etat, messagerie };

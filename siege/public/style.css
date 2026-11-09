@@ -152,3 +152,8 @@ label.champ.coche{display:flex;align-items:center;gap:8px;grid-column:1/-1}
 .moteur.eteint{opacity:.75}
 .moteur ul.modeles{list-style:none;padding:0;display:grid;gap:4px;margin:6px 0}
 .moteur ul.modeles li{display:flex;justify-content:space-between;align-items:center;gap:8px}
+/* Demandes rédigées par l'IA (Backlog) */
+.redaction{margin-top:10px}
+.redaction textarea,.carte > textarea{width:100%;box-sizing:border-box;min-height:64px}
+.erreur-red{color:var(--risk);font-size:13px}
+.redaction textarea[name="description"],.redaction textarea[name="reproduction"]{min-height:240px;font:12.5px/1.5 var(--mono)}

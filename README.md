@@ -392,7 +392,13 @@ agent qui a fini et `fork` sont refusés (liaison session → étape dans `~/.si
   quand Claude Code lui a confié une mission, avec le ticket en cours ; journal des missions.
 - **Backlog** : file de travail avec bouton *Lancer*, questions des agents, tableaux Features / Bugs en
   colonnes par statut ; glisser une carte change son statut ou son rang ; fiche ticket avec fil de
-  commentaires et réponse du CEO.
+  commentaires et réponse du CEO. **Décrire une demande** : écrivez le besoin en langage courant (« je veux un
+  journal de log sur la fiche de chaque modèle ») ; une session non interactive du directeur, en lecture seule
+  (`claude -p`, outils Read, Grep, Glob, sous la garde), rédige le ticket : feature ou bug, filiale, titre,
+  description structurée (contexte, user story, règles, critères d'acceptation, hors périmètre, questions
+  ouvertes), dépendances. Vous relisez et modifiez la proposition, puis *Créer le ticket*, *Corriger la
+  rédaction* (avec votre remarque) ou *Abandonner* : rien n'entre au backlog sans votre validation. Une rédaction
+  à la fois, 5 min au plus, reprise au redémarrage du Siège ; suivi dans `~/.siege/redactions.json`.
 - **Agents** : créer, modifier (description, modèle, consigne), supprimer.
 - **Droits** : exceptions à accorder ou refuser, refus récents de la garde, autorisations permanentes,
   droits par rôle, skills (socle et entreprise) par type d'agent.

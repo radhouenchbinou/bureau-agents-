@@ -171,6 +171,7 @@
           h('span', { text: e.titre }), h('button', { type: 'button', class: 'btn petit prim', text: 'Lancer', onclick: () => lancer(e.id) })))) : h('p', { class: 'aide', text: 'Rien de prêt : tout est livré ou attend une dépendance.' }),
         E.questions.liste.length ? h('div', { class: 'file' }, h('h3', { text: 'Questions des agents' }), E.questions.liste.map(x => h('div', { class: 'file-l' }, h('span', { class: 'n', text: '?' }), h('span', { class: 'mono', text: x.id }),
           h('span', { text: '(' + x.question.auteur + ') ' + x.question.texte }), h('button', { type: 'button', class: 'btn petit', text: 'Répondre', onclick: () => { coll = x.collection; ficheTicket(E[x.collection].elements.find(e => e.id === x.id)); } })))) : null),
+      carteRedaction(),
       h('div', { class: 'barre' }, seg, selF, rech, h('button', { type: 'button', class: 'btn prim', text: coll === 'bugs' ? 'Nouveau bug' : 'Nouvelle feature', onclick: () => ficheTicket(null) })),
       h('p', { class: 'aide', text: 'Glissez une carte pour changer son statut ou sa priorité (le rang 1 passe en premier).' }),
       h('div', { class: 'kanban' }, statuts.map(st => {
@@ -181,6 +182,44 @@
         col.addEventListener('drop', ev => { ev.preventDefault(); col.classList.remove('cible'); deposer(glisse, st, null); });
         return col;
       })));
+  }
+  // ---------- Demande en langage courant → ticket rédigé par l'IA → validation du CEO ----------
+  const CHAMPS_PROPOSITION = { features: ['titre', 'filiale', 'priorite', 'dependances', 'description'], bugs: ['titre', 'filiale', 'gravite', 'story', 'reproduction', 'attendu', 'obtenu'] };
+  function carteRedaction() {
+    const vueB = $('#v-backlog'), sale = () => { vueB.dataset.modifie = '1'; }, propre = () => { delete vueB.dataset.modifie; };
+    const zone = h('textarea', { placeholder: 'Ex. : je veux ajouter un journal de log sur la fiche de chaque modèle', 'aria-label': 'Décrire une demande', oninput: sale });
+    const envoyer = h('button', { type: 'button', class: 'btn prim', text: 'Rédiger le ticket avec l\'IA', onclick: async () => {
+      if (zone.value.trim().length < 10) return toast('Décrivez la demande en une ou deux phrases');
+      envoyer.disabled = true; propre();
+      await act({ op: 'redaction.demander', texte: zone.value }, 'Demande envoyée : le directeur rédige le ticket').catch(() => { envoyer.disabled = false; });
+    } });
+    const liste = (E.redactions || []).map(x => {
+      const tete = h('div', { class: 'barre' }, h('span', { class: 'mono', text: x.id }), h('span', { class: 'tag', text: x.statut }), h('span', { class: 'aide', text: depuis(x.maj_le) }));
+      const dem = h('p', { class: 'aide', text: '« ' + x.demande + ' »' });
+      if (x.statut === 'En rédaction') return h('div', { class: 'carte redaction' }, tete, dem, h('p', { class: 'aide', text: 'Le directeur rédige la proposition (lecture seule du code et des fiches)…' }));
+      if (x.statut === 'Créée') return h('div', { class: 'carte redaction' }, tete, dem, h('p', {}, 'Ticket créé : ', h('button', { type: 'button', class: 'btn petit', text: x.ticket, onclick: () => { coll = /^BUG-/.test(x.ticket) ? 'bugs' : 'features'; ficheTicket(E[coll].elements.find(e => e.id === x.ticket)); } })));
+      if (x.statut === 'Abandonnée') return h('div', { class: 'carte redaction' }, tete, dem);
+      const rem = h('textarea', { placeholder: 'Ce qu\'il faut changer dans la rédaction…', 'aria-label': 'Remarque pour ' + x.id, oninput: sale });
+      const actions = h('div', { class: 'barre' },
+        x.statut === 'À valider' ? h('button', { type: 'submit', class: 'btn prim', text: 'Créer le ticket' }) : null,
+        h('button', { type: 'button', class: 'btn', text: x.statut === 'Erreur' ? 'Réessayer' : 'Corriger la rédaction', onclick: async () => {
+          const r = rem.value.trim() || (x.statut === 'Erreur' ? 'Nouvel essai' : ''); if (!r) return toast('Écrivez ce qu\'il faut changer');
+          propre(); await act({ op: 'redaction.corriger', id: x.id, remarque: r }, 'Nouvelle rédaction demandée').catch(() => {});
+        } }),
+        h('button', { type: 'button', class: 'btn dang', text: 'Abandonner', onclick: async () => { propre(); await act({ op: 'redaction.abandonner', id: x.id }, 'Demande abandonnée').catch(() => {}); } }));
+      if (x.statut === 'Erreur') return h('div', { class: 'carte redaction' }, tete, dem, h('p', { class: 'erreur-red', text: x.erreur }), rem, actions);
+      const p = x.proposition || {}, col = p.collection === 'bugs' ? 'bugs' : 'features', sch = E.schemas[col].champs;
+      const form = h('form', { class: 'carte redaction', oninput: sale, onsubmit: async ev => {
+        ev.preventDefault();
+        const prop = { collection: col };
+        for (const k of CHAMPS_PROPOSITION[col]) { const el = form.elements[k]; if (el) prop[k] = el.value; }
+        try { propre(); const r = await act({ op: 'redaction.valider', id: x.id, proposition: prop }, 'Ticket créé'); coll = r.collection; ficheTicket(E[coll].elements.find(e => e.id === r.id)); } catch {}
+      } }, tete, dem, h('p', { class: 'aide', text: 'Proposition de l\'IA (' + (col === 'bugs' ? 'bug' : 'feature') + ') : relisez, modifiez si besoin, puis créez le ticket.' }),
+        CHAMPS_PROPOSITION[col].filter(k => sch[k]).map(k => champ(k, sch[k], p[k])), rem, actions);
+      return form;
+    });
+    return h('div', { class: 'carte' }, h('div', { class: 'barre' }, h('h3', { text: 'Décrire une demande' }), h('span', { class: 'aide', text: 'le directeur rédige le ticket, vous le validez avant qu\'il entre au backlog' })),
+      zone, h('div', { class: 'barre' }, envoyer), liste);
   }
   function champ(k, d, v) {
     const lib = h('span', {}, h('b', { text: d.libelle }), d.requis ? ' *' : '');
