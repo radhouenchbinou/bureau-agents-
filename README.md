@@ -27,7 +27,7 @@ Vous (CEO) ── valide chaque étape, répond aux questions dans Notion
 | `templates/` | Fiche de filiale, ADR |
 | `portfolio/` | Registre des filiales, contrats d'interface entre filiales, décisions de groupe, backlog local |
 | `siege/` | Le Siège (interface web locale) et l'outil `backlog.js` utilisé par les agents |
-| `exemples/rne-v2/` | Exemple complet : reconstruction d'un scrapper par 4 filiales, avec son backlog |
+| `exemples/cyclofix/` | Exemple fictif complet : 3 filiales, un repo chacune, backlog avec une livraison groupée |
 
 Les rôles d'une filiale sont **génériques** : les mêmes agents servent toutes les filiales, et chacun lit la
 **fiche** de la filiale (`<projet>/CLAUDE.md`) avant d'agir. Changer d'écosystème = changer le registre
@@ -65,7 +65,7 @@ les agents « s'allument » à leur poste quand une mission leur est confiée.
    ```
    (`projets/` est ignoré par git : chaque projet garde son propre dépôt.)
    Plusieurs projets qui se parlent = plusieurs filiales ; un gros projet peut aussi être découpé en
-   plusieurs filiales (un dossier chacune), comme dans `exemples/rne-v2`.
+   plusieurs filiales (un dossier chacune), comme dans `exemples/cyclofix`.
 
 2. **Intégrer la filiale** dans Claude Code :
    ```
@@ -329,9 +329,10 @@ jeton de page (anti-CSRF), aucun contenu de conversation servi, jeton Notion jam
 
 Tests : `cd siege && npm test` (dont l'intégration Notion de bout en bout contre une fausse API).
 
-## Exemple : RNE v2
+## Exemple : CycloFix (fictif)
 
-`exemples/rne-v2/` contient un écosystème complet pour essayer l'organisation : la reconstruction à partir
-de zéro d'un scrapper du Registre National des Entreprises tunisien, découpée en 4 filiales (Collecte,
-Données, Pilotage, Plateforme), avec 34 features ordonnées en 7 jalons et le rapport du premier test de bout
-en bout. Pour l'utiliser : `exemples/rne-v2/LISEZMOI.md`.
+`exemples/cyclofix/` contient un écosystème inventé pour essayer l'organisation : CycloFix, réparation de vélos à
+domicile, avec **3 filiales et un repo chacune** (API Spring Boot, application atelier React, site vitrine React),
+un groupe pour les contrats, et un backlog de 14 features en 4 jalons. On y trouve un contrat d'interface d'abord,
+des features avec dépendances, et une **feature multi-filiales livrée d'un bloc** (GRP-002 : acompte payé en ligne,
+une PR dans l'API et une dans la vitrine). Pour l'installer : `exemples/cyclofix/LISEZMOI.md`.

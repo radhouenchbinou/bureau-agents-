@@ -19,7 +19,8 @@ fichiers, rien ne doit venir d'une session précédente.
      ou Groupe), étapes retenues (commente-les sur le ticket). Demande validation.
      Plusieurs filiales → propose le découpage : ce ticket devient le **parent**, un ticket enfant par filiale
      (`creer feature --filiale <Nom> --parent <ID> --dependances <producteur>`) ; voir « Feature sur plusieurs
-     filiales » dans le workflow. Après validation, chaque enfant passe par `/feature <enfant>` (1 → 7).
+     filiales » dans le workflow. Après validation, chaque enfant passe par `/feature <enfant>` (1 → 7), une fois la conception du parent validée
+     (parent mis à « 8 · Livraison » : les enfants qui en dépendent deviennent prêts).
    - Ticket parent dont les enfants ne sont pas tous validés en 7 → donne leur avancement (`voir <ID>`, champ `lot`) et
      termine ton tour. Tous validés en 7 → étape **8 · Livraison groupée** par le devops (`fusionner --ticket <ID>`).
    - Sinon → l'étape inscrite. Si le dernier commentaire est `Validé par le CEO · Étape suivante : <n>`, c'est l'étape <n>.

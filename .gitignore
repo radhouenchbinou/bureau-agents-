@@ -1,4 +1,4 @@
-projets/
+/projets/
 node_modules/
 .DS_Store
 *.tmp

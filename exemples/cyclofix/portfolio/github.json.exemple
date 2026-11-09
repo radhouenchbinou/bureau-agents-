@@ -1,0 +1,9 @@
+{
+  "app_id": 123456,
+  "installation_id": 98765432,
+  "repos": {
+    "projets/cyclofix-api": "mon-compte/cyclofix-api",
+    "projets/cyclofix-atelier": "mon-compte/cyclofix-atelier",
+    "projets/cyclofix-vitrine": "mon-compte/cyclofix-vitrine"
+  }
+}

@@ -37,10 +37,10 @@ test('activité : sessions du Siège et missions des sous-agents', async () => {
   fs.mkdirSync(path.join(dir, sid, 'subagents'), { recursive: true }); fs.mkdirSync(path.join(claude, 'sessions'));
   fs.writeFileSync(path.join(dir, sid + '.jsonl'), '{}\n');
   fs.writeFileSync(path.join(claude, 'sessions', 'x.json'), JSON.stringify({ sessionId: sid, pid: process.pid, status: 'idle' }));
-  fs.writeFileSync(path.join(dir, sid, 'subagents', 'a1.meta.json'), JSON.stringify({ agentType: 'qa', description: 'Recette COL-002' }));
-  fs.writeFileSync(path.join(dir, sid, 'subagents', 'a1.jsonl'), JSON.stringify({ type: 'user', message: { content: 'Filiale : Collecte — dossier projets/rne-v2/collecte\nMode recette, story COL-002' } }) + '\n');
+  fs.writeFileSync(path.join(dir, sid, 'subagents', 'a1.meta.json'), JSON.stringify({ agentType: 'qa', description: 'Recette RES-002' }));
+  fs.writeFileSync(path.join(dir, sid, 'subagents', 'a1.jsonl'), JSON.stringify({ type: 'user', message: { content: 'Filiale : Réservations — dossier projets/cyclofix-api\nMode recette, story RES-002' } }) + '\n');
   fs.mkdirSync(path.join(claude, 'projects', '-Users-r-autre'));   // autre projet : ignoré
   const r = await lire({ racine, dossierClaude: claude });
   assert.strictEqual(r.direction.etat, 'attend_ceo');
-  assert.deepStrictEqual([r.missions[0].agent, r.missions[0].filiale, r.missions[0].story, r.missions[0].etat], ['qa', 'Collecte', 'COL-002', 'au_poste']);
+  assert.deepStrictEqual([r.missions[0].agent, r.missions[0].filiale, r.missions[0].story, r.missions[0].etat], ['qa', 'Réservations', 'RES-002', 'au_poste']);
 });

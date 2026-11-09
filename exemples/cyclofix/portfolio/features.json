@@ -1,0 +1,220 @@
+{
+  "elements": [
+    {
+      "id": "GRP-001",
+      "titre": "Contrat de l'API des réservations",
+      "rang": 1,
+      "filiale": "Groupe",
+      "jalon": "Jalon 0 · Fondations",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [],
+      "description": "Définir dans `portfolio/interfaces.md` le contrat REST que l'API (RES) expose à l'atelier (ATE) et à la vitrine (VIT) : ressources créneaux, réservations, techniciens ; format JSON avec exemples, erreurs, pagination, authentification, versionnement.",
+      "agent": ""
+    },
+    {
+      "id": "RES-001",
+      "titre": "Squelette de l'API et santé",
+      "rang": 2,
+      "filiale": "Réservations",
+      "jalon": "Jalon 0 · Fondations",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "GRP-001"
+      ],
+      "description": "Projet Spring Boot 3 / Java 21, PostgreSQL via Flyway, endpoint `GET /api/sante`, CI qui compile et teste. Configuration par variables d'environnement, aucun secret dans le dépôt.",
+      "agent": ""
+    },
+    {
+      "id": "ATE-001",
+      "titre": "Squelette de l'application atelier",
+      "rang": 3,
+      "filiale": "Atelier",
+      "jalon": "Jalon 0 · Fondations",
+      "statut": "À faire",
+      "priorite": "Moyenne",
+      "etape": "",
+      "dependances": [
+        "GRP-001"
+      ],
+      "description": "Application React + Vite + TypeScript, connexion technicien (écran seulement, données factices), page « Ma tournée » vide, thème clair et sombre, tests Vitest.",
+      "agent": ""
+    },
+    {
+      "id": "VIT-001",
+      "titre": "Squelette du site vitrine",
+      "rang": 4,
+      "filiale": "Vitrine",
+      "jalon": "Jalon 0 · Fondations",
+      "statut": "À faire",
+      "priorite": "Moyenne",
+      "etape": "",
+      "dependances": [
+        "GRP-001"
+      ],
+      "description": "Site React + Vite : accueil, page tarifs (forfaits Révision 49 €, Crevaison 19 €, Freins 29 €), mentions légales ; accessible au clavier, responsive.",
+      "agent": ""
+    },
+    {
+      "id": "RES-002",
+      "titre": "Créneaux disponibles par code postal",
+      "rang": 5,
+      "filiale": "Réservations",
+      "jalon": "Jalon 1 · Réserver",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "RES-001"
+      ],
+      "description": "`GET /api/creneaux?codePostal=&du=&au=` : créneaux de 2 h des techniciens qui couvrent ce code postal, hors créneaux déjà réservés. Zones desservies : Paris et petite couronne (75, 92, 93, 94).",
+      "agent": ""
+    },
+    {
+      "id": "RES-003",
+      "titre": "Réserver un créneau",
+      "rang": 6,
+      "filiale": "Réservations",
+      "jalon": "Jalon 1 · Réserver",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "RES-002"
+      ],
+      "description": "`POST /api/reservations` : créneau, adresse, téléphone, forfait. Un créneau ne peut être réservé qu'une fois (concurrence gérée). Annulation gratuite jusqu'à 24 h avant.",
+      "agent": ""
+    },
+    {
+      "id": "VIT-002",
+      "titre": "Parcours de réservation",
+      "rang": 7,
+      "filiale": "Vitrine",
+      "jalon": "Jalon 1 · Réserver",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "VIT-001",
+        "RES-003"
+      ],
+      "description": "Code postal → choix du créneau → forfait → coordonnées → confirmation. Messages d'erreur clairs (zone non desservie, créneau pris entre-temps).",
+      "agent": ""
+    },
+    {
+      "id": "ATE-002",
+      "titre": "Tournée du jour du technicien",
+      "rang": 8,
+      "filiale": "Atelier",
+      "jalon": "Jalon 1 · Réserver",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "ATE-001",
+        "RES-003"
+      ],
+      "description": "Liste ordonnée des interventions du jour (heure, adresse, forfait, téléphone), lien itinéraire, statut « en route / sur place / terminé ».",
+      "agent": ""
+    },
+    {
+      "id": "GRP-002",
+      "titre": "Acompte payé en ligne",
+      "rang": 9,
+      "filiale": "Groupe",
+      "jalon": "Jalon 2 · Payer",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "RES-003",
+        "VIT-002"
+      ],
+      "description": "Feature multi-filiales : à la réservation, le client paie un acompte de 10 € (déduit du forfait). Parent de RES-004 (API de paiement) et VIT-003 (écran de paiement) ; les deux PR sont fusionnées ensemble. Contrat à compléter dans `portfolio/interfaces.md`.",
+      "agent": ""
+    },
+    {
+      "id": "RES-004",
+      "titre": "API de paiement de l'acompte",
+      "rang": 10,
+      "filiale": "Réservations",
+      "jalon": "Jalon 2 · Payer",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "GRP-002"
+      ],
+      "description": "Intention de paiement chez un prestataire (mode test uniquement), webhook de confirmation signé, réservation « confirmée » seulement après paiement ; remboursement automatique si annulation > 24 h.",
+      "agent": "",
+      "parent": "GRP-002"
+    },
+    {
+      "id": "VIT-003",
+      "titre": "Écran de paiement de l'acompte",
+      "rang": 11,
+      "filiale": "Vitrine",
+      "jalon": "Jalon 2 · Payer",
+      "statut": "À faire",
+      "priorite": "Haute",
+      "etape": "",
+      "dependances": [
+        "GRP-002",
+        "RES-004"
+      ],
+      "description": "Étape de paiement dans le parcours de réservation, retour succès / échec, aucun numéro de carte ne transite par nos serveurs.",
+      "agent": "",
+      "parent": "GRP-002"
+    },
+    {
+      "id": "ATE-003",
+      "titre": "Diagnostic et pièces sur place",
+      "rang": 12,
+      "filiale": "Atelier",
+      "jalon": "Jalon 3 · Atelier",
+      "statut": "À faire",
+      "priorite": "Moyenne",
+      "etape": "",
+      "dependances": [
+        "ATE-002"
+      ],
+      "description": "Le technicien coche les points contrôlés, ajoute des pièces (catalogue simple), photo avant / après, et fait signer le client sur l'écran.",
+      "agent": ""
+    },
+    {
+      "id": "RES-005",
+      "titre": "Facture et avis client",
+      "rang": 13,
+      "filiale": "Réservations",
+      "jalon": "Jalon 3 · Atelier",
+      "statut": "À faire",
+      "priorite": "Moyenne",
+      "etape": "",
+      "dependances": [
+        "ATE-003",
+        "RES-004"
+      ],
+      "description": "À la fin de l'intervention : facture PDF (forfait + pièces − acompte) envoyée par e-mail, lien d'avis valable 14 jours.",
+      "agent": ""
+    },
+    {
+      "id": "VIT-004",
+      "titre": "Espace client",
+      "rang": 14,
+      "filiale": "Vitrine",
+      "jalon": "Jalon 3 · Atelier",
+      "statut": "À faire",
+      "priorite": "Basse",
+      "etape": "",
+      "dependances": [
+        "VIT-003",
+        "RES-005"
+      ],
+      "description": "Connexion par lien magique e-mail : réservations passées et à venir, factures, annulation, avis.",
+      "agent": ""
+    }
+  ]
+}

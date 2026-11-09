@@ -31,7 +31,9 @@ Chaque mission confiée à un agent commence par `Filiale : <nom> — dossier <c
 Une feature qui touche plusieurs filiales se découpe en un **ticket parent** (souvent `GRP-…`) et **un ticket enfant
 par filiale** (`creer feature --filiale <Nom> --parent <PARENT> --dependances <producteur>`), décidés au cadrage.
 - Parent : 0 Cadrage → 2 Conception (l'architecte écrit le contrat dans `portfolio/interfaces.md`) → attente des
-  enfants → **8 Livraison groupée** → 9 Documentation.
+  enfants → **8 Livraison groupée** → 9 Documentation. Une fois la conception validée, le parent est mis à
+  « 8 · Livraison » : ses enfants qui dépendent de lui deviennent prêts dans la `file` (pour eux, dépendre du parent
+  veut dire « contrat validé », pas « livré »).
 - Chaque enfant suit 1 → 7 dans sa filiale, avec sa branche et **sa PR inscrite sur son ticket**
   (`github.js pr … --ticket <ID>`). Il s'arrête à 7 : pas de fusion seule (l'outil la refuse).
 - 8 sur le parent, quand tous les enfants sont validés en 7 : le devops lance

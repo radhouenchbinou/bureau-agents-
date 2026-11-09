@@ -93,9 +93,16 @@ function complet(nom, e) {
 }
 
 // Une feature est « prête » quand toutes ses dépendances sont livrées
+// Une dépendance est satisfaite quand le ticket est livré. Exception : un enfant qui dépend de son parent (feature
+// multi-filiales) attend seulement que la conception du parent soit validée (étape ≥ 3), car le parent n'est livré
+// qu'après ses enfants.
 function prete(e, features) {
-  const livres = new Set(features.filter(x => x.statut === 'Livré').map(x => x.id));
-  return (e.dependances || []).every(d => livres.has(d));
+  const parId = new Map(features.map(x => [x.id, x]));
+  return (e.dependances || []).every(d => {
+    const x = parId.get(d); if (!x) return false;
+    if (x.statut === 'Livré') return true;
+    return d === e.parent && parseInt(x.etape, 10) >= 3;
+  });
 }
 
 // Ordre de priorité : rang croissant (1 = le plus urgent), sans rang à la fin, puis identifiant

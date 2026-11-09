@@ -55,3 +55,13 @@ test('Notion : une base créée avant les champs Parent et PR les reçoit à la 
     assert.strictEqual(srv.etat.appels.filter(a => a.startsWith('PATCH /databases')).length, 1, 'une seule mise à niveau');
   } finally { srv.close(); }
 });
+
+test('un enfant qui dépend de son parent démarre quand la conception du parent est validée, pas sa livraison', () => {
+  const { prete } = require('../lib/backlog');
+  const P = { id: 'GRP-002', statut: 'En cours', etape: '2 · Conception', dependances: [] };
+  const E = { id: 'RES-004', parent: 'GRP-002', dependances: ['GRP-002'] }, A = { id: 'COL-009', dependances: ['GRP-002'] };
+  assert.strictEqual(prete(E, [P, E]), false);
+  const P8 = { ...P, etape: '8 · Livraison' };
+  assert.strictEqual(prete(E, [P8, E]), true);
+  assert.strictEqual(prete(A, [P8, A]), false, 'un ticket qui n\'est pas son enfant attend la livraison');
+});

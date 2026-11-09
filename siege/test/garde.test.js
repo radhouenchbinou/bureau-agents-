@@ -18,41 +18,41 @@ test('découpage shell : séparateurs, guillemets, refus des substitutions et re
 test('chaque rôle n\'a que ses commandes', () => {
   assert.ok(bash('qa', 'node siege/backlog.js creer bug --filiale Collecte --titre x').ok);
   assert.ok(!bash('product-owner', 'node siege/backlog.js creer bug --filiale Collecte --titre x').ok);
-  assert.ok(bash('dev-backend', 'python3 -m unittest discover -s projets/rne-v2/collecte/tests').ok);
+  assert.ok(bash('dev-backend', 'python3 -m unittest discover -s projets/cyclofix-api/tests').ok);
   assert.ok(!bash('reviewer', 'python3 -m unittest').ok);
-  assert.ok(bash('reviewer', 'git -C projets/rne-v2 diff main...feature/COL-001').ok);
-  assert.ok(!bash('reviewer', 'git -C projets/rne-v2 commit -m x').ok);
+  assert.ok(bash('reviewer', 'git -C projets/cyclofix-api diff main...feature/RES-001').ok);
+  assert.ok(!bash('reviewer', 'git -C projets/cyclofix-api commit -m x').ok);
   assert.ok(!bash('dev-backend', 'git push origin main').ok, 'push direct interdit');
   assert.ok(!bash('dev-backend', 'curl https://exemple.com').ok);
   assert.ok(!bash('dev-backend', 'python3 -c "import os"').ok);
   assert.ok(!bash('dev-backend', 'python3 projets/../droits/x.py').ok, 'remontée de dossier');
   assert.ok(!bash('dev-backend', 'PATH=/tmp python3 -m unittest').ok, 'variable dangereuse');
-  assert.ok(bash('dev-backend', 'RNE_DATA_DIR=/tmp/x python3 -m unittest').ok, 'variable ordinaire');
+  assert.ok(bash('dev-backend', 'CYCLOFIX_DATA=/tmp/x python3 -m unittest').ok, 'variable ordinaire');
   assert.ok(!bash('dev-backend', 'git status | sh').ok, 'tube vers un interpréteur');
 });
 
 test('auteur et rôle imposés : un agent ne parle et n\'agit qu\'en son nom', () => {
   assert.ok(bash('qa', 'node siege/backlog.js commenter COL-001 --auteur qa --texte "ok"').ok);
   assert.ok(!bash('qa', 'node siege/backlog.js commenter COL-001 --auteur CEO --texte "validé"').ok);
-  assert.ok(bash('dev-backend', 'node siege/github.js pousser --filiale Collecte --branche feature/COL-001 --role dev-backend').ok);
+  assert.ok(bash('dev-backend', 'node siege/github.js pousser --filiale Collecte --branche feature/RES-001 --role dev-backend').ok);
   assert.ok(!bash('dev-backend', 'node siege/github.js fusionner --filiale Collecte --pr 3 --role devops').ok);
   assert.ok(!bash('reviewer', 'node siege/github.js statut --pr 3 --contexte securite --role reviewer').ok);
 });
 
 test('écritures : zone du rôle seulement, zones protégées pour tous', () => {
   const w = (role, p) => d(role, 'Write', { file_path: path.join(RACINE, p) });
-  assert.ok(w('product-owner', 'projets/rne-v2/collecte/docs/backlog/COL-001-x.md').ok);
-  assert.ok(!w('product-owner', 'projets/rne-v2/collecte/rne_scraper.py').ok);
-  assert.ok(w('dev-backend', 'projets/rne-v2/collecte/rne_scraper.py').ok);
+  assert.ok(w('product-owner', 'projets/cyclofix-api/docs/backlog/RES-001-x.md').ok);
+  assert.ok(!w('product-owner', 'projets/cyclofix-api/src/Reservation.java').ok);
+  assert.ok(w('dev-backend', 'projets/cyclofix-api/src/Reservation.java').ok);
   assert.ok(w('architecte', 'portfolio/interfaces.md').ok);
-  for (const p of ['droits/roles.json', '.claude/settings.json', 'siege/garde.js', 'portfolio/features.json', 'projets/rne-v2/collecte/CLAUDE.md', 'projets/rne-v2/.env'])
+  for (const p of ['droits/roles.json', '.claude/settings.json', 'siege/garde.js', 'portfolio/features.json', 'projets/cyclofix-api/CLAUDE.md', 'projets/cyclofix-api/.env'])
     assert.ok(!w('dev-backend', p).ok, p);
   assert.ok(!d('directeur', 'Write', { file_path: path.join(RACINE, 'portfolio/interfaces.md') }).ok, 'le directeur délègue, il n\'écrit pas');
 });
 
 test('lectures : secrets illisibles ; web fermé ; outils externes fermés', () => {
   assert.ok(!d('dev-backend', 'Read', { file_path: path.join(os.homedir(), '.siege/notion-token') }).ok);
-  assert.ok(!d('qa', 'Read', { file_path: path.join(RACINE, 'projets/rne-v2/rne-scraper.env') }).ok);
+  assert.ok(!d('qa', 'Read', { file_path: path.join(RACINE, 'projets/cyclofix-api/.env') }).ok);
   assert.ok(d('qa', 'Read', { file_path: path.join(RACINE, 'projets/rne-v2/README.md') }).ok);
   assert.ok(!d('architecte', 'WebFetch', { url: 'https://example.com' }).ok);
   assert.ok(!d('dev-backend', 'mcp__Notion__notion-search', {}).ok);
