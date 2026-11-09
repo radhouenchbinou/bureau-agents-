@@ -23,6 +23,11 @@ const AIDE = `GitHub des agents — usage : node siege/github.js <commande> --ro
 `;
 const CONTEXTE_DU_ROLE = { reviewer: 'revue', 'rssi-devsecops': 'securite' };
 
+// C6 : refuse le feu si la tête de la PR n'est plus le commit relu
+function verifierTeteRelue(p, sha, pr) {
+  if (p.head.sha !== sha) throw new gh.ErreurGithub(`La tête de la PR #${pr} a bougé (${p.head.sha} au lieu de ${sha}) : feu refusé, relecture nécessaire`);
+}
+
 async function main(argv) {
   const [cmd, ...a] = argv, { o } = options(a);
   const acteur = identite.resoudre({ outil: 'github', args: argv });
@@ -63,7 +68,7 @@ async function main(argv) {
       // C6 : le feu porte sur le commit relu (--sha) ; refus si la tête de la PR a bougé depuis la revue
       if (!/^[0-9a-f]{40}$/.test(o.sha || '')) throw new gh.ErreurGithub('--sha <commit relu> obligatoire (40 caractères hexadécimaux)');
       const p = await gh.appel('GET', `/repos/${repo}/pulls/${Number(o.pr)}`, jeton);
-      if (p.head.sha !== o.sha) throw new gh.ErreurGithub(`La tête de la PR #${o.pr} a bougé (${p.head.sha} au lieu de ${o.sha}) : feu refusé, relecture nécessaire`);
+      verifierTeteRelue(p, o.sha, o.pr);
       await gh.appel('POST', `/repos/${repo}/statuses/${o.sha}`, jeton, { state: o.etat, context: 'agents/' + o.contexte, description: String(o.description || role).slice(0, 140) });
       return console.log(`Feu agents/${o.contexte} = ${o.etat} sur la PR #${o.pr}`);
     }
@@ -117,4 +122,4 @@ async function pousserBranche({ racine = RACINE, role, filiale: nom, branche }) 
   gh.pousser(path.join(racine, filiale.repo), repo, branche || '', await gh.jetonRole(c, politique, role, repo));
   return `Branche ${branche} poussée sur ${repo}`;
 }
-module.exports = { main, pousserBranche };
+module.exports = { main, pousserBranche, verifierTeteRelue };
