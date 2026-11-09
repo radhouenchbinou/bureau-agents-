@@ -13,6 +13,8 @@ Vous (CEO) ── valide chaque étape, répond aux questions dans Notion
      └─ Filiales (une par projet) : product-owner · dev-backend · dev-frontend · qa
 ```
 
+> **Première installation ?** Suivez [ONBOARDING.md](ONBOARDING.md) : les 9 étapes, de l'installation à la routine du CEO.
+
 ## Ce qu'il y a dedans
 
 | Dossier / fichier | Rôle |
