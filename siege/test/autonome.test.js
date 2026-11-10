@@ -60,7 +60,7 @@ test('boucle : ticket sans risque, instance dans son worktree, rapport écrit, p
   assert.strictEqual(bilan[0].ok, true);
   assert.ok(fs.existsSync(bilan[0].rapport), 'rapport du directeur');
   assert.match(fs.readFileSync(bilan[0].rapport, 'utf8'), /page\.txt/);
-  assert.strictEqual((await src.lister())[0].statut, 'À faire', 'le ticket n\'est pas fermé : pas de fusion dans le lot 1');
+  assert.strictEqual((await src.lister())[0].statut, 'En revue', 'instance terminée, PR à relire : pas de fusion dans le lot 1');
 });
 
 test('boucle : une modification de fichier critique met le ticket en attente et passe au suivant', async () => {
@@ -77,7 +77,7 @@ test('boucle : une modification de fichier critique met le ticket en attente et 
   assert.strictEqual(bilan[1].ok, true, 'le suivant est traité');
   const tickets = await src.lister();
   assert.strictEqual(tickets.find(t => t.titre === 'Changer la garde').statut, 'Bloqué');
-  assert.strictEqual(tickets.find(t => t.titre === 'Autre chose').statut, 'À faire');
+  assert.strictEqual(tickets.find(t => t.titre === 'Autre chose').statut, 'En revue', 'traité, pas repris');
 });
 
 test('boucle : un titre à risque (fusion) est mis en attente avant même de créer une instance', async () => {
