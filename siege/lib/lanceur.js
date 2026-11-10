@@ -21,10 +21,10 @@ function mission(ticket) {
 }
 
 // Lance une instance et renvoie { ok, sortie } ; ne lève pas d'exception pour un échec de l'agent
-function lancerClaude({ dossier, ticket, bin = process.env.CLAUDE_BIN || 'claude', dureeMax = DUREE_MAX_MS }) {
+function lancerClaude({ dossier, ticket, mission: texte = null, outils = OUTILS, bin = process.env.CLAUDE_BIN || 'claude', dureeMax = DUREE_MAX_MS }) {
   return new Promise((ok, ko) => {
     let sortie = '', coupe = false;
-    const p = spawn(bin, ['-p', mission(ticket), '--output-format', 'text', '--allowedTools', ...OUTILS], { cwd: dossier, stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn(bin, ['-p', texte || mission(ticket), '--output-format', 'text', '--allowedTools', ...outils], { cwd: dossier, stdio: ['ignore', 'pipe', 'pipe'] });
     const t = setTimeout(() => { coupe = true; p.kill('SIGTERM'); }, dureeMax);
     p.stdout.on('data', d => { sortie = (sortie + d).slice(-20000); });
     p.stderr.on('data', d => { sortie = (sortie + d).slice(-20000); });

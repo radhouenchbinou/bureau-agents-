@@ -4,6 +4,8 @@
 'use strict';
 
 const ROLES = { revue: 'reviewer', securite: 'rssi-devsecops' };
+// Relecteurs : lecture seule, aucun outil d'écriture ni git qui modifie
+const OUTILS_LECTURE = ['Read', 'Grep', 'Glob', 'Bash(git diff:*)', 'Bash(git log:*)'];
 
 function mission(role, ticket) {
   const angle = role === 'rssi-devsecops'
@@ -28,7 +30,7 @@ async function revoir({ lancer, dossier, ticket }) {
   const res = {};
   for (const [cle, role] of Object.entries(ROLES)) {
     let r;
-    try { r = await lancer({ dossier, ticket, role, mission: mission(role, ticket) }); }
+    try { r = await lancer({ dossier, ticket, role, mission: mission(role, ticket), outils: OUTILS_LECTURE }); }
     catch { r = { ok: false, sortie: '' }; }
     res[cle] = r && r.ok ? verdict(r.sortie) : 'failure';
   }

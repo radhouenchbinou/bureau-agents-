@@ -6,24 +6,41 @@
 'use strict';
 const path = require('path');
 const { SourceFichier } = require('./lib/backlog');
-const { boucle, choisir } = require('./lib/autonome');
+const { boucleParallele, choisir } = require('./lib/autonome');
 const { lancerClaude } = require('./lib/lanceur');
+const pub = require('./lib/publication');
+const revue = require('./lib/revue');
 const crit = require('./lib/criticite');
 
 const RACINE = path.resolve(__dirname, '..');
 
 function options(argv) {
-  const o = { lancer: false, max: 1, portfolio: '', instances: path.join(RACINE, '.claude', 'worktrees') };
+  const o = { lancer: false, max: 1, portfolio: '', repo: '', instances: path.join(RACINE, '.claude', 'worktrees') };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--lancer') o.lancer = true;
     else if (a === '--max') o.max = Math.max(1, parseInt(argv[++i], 10) || 1);
     else if (a === '--portfolio') o.portfolio = argv[++i] || '';
     else if (a === '--instances') o.instances = path.resolve(argv[++i] || o.instances);
+    else if (a === '--repo') o.repo = argv[++i] || '';
     else throw new Error('option inconnue : ' + a);
   }
   if (!o.portfolio) throw new Error('--portfolio <dossier> obligatoire');
   return o;
+}
+
+// Jetons GitHub par rôle (app de l'entreprise, restreints au repo) : dev pour la PR, reviewer pour les feux, devops pour la fusion.
+// Un jeton d'installation dure une heure : une exécution longue doit être relancée.
+async function liaisonGithub(repo) {
+  const gh = require('./lib/github'), garde = require('./lib/garde');
+  const c = gh.config(RACINE), politique = garde.charger(RACINE);
+  const [jDev, jRev, jDevops] = await Promise.all(['dev-backend', 'reviewer', 'devops'].map(r => gh.jetonRole(c, politique, r, repo)));
+  return {
+    publier: pub.publier({ jeton: jDev, repo }),
+    poser: pub.poserFeux({ jeton: jRev, repo }),
+    fusionner: pub.fusionner({ jeton: jDevops, repo }),
+    revoir: ({ ticket, dossier }) => revue.revoir({ lancer: lancerClaude, dossier, ticket }),
+  };
 }
 
 async function main(argv) {
@@ -42,10 +59,13 @@ async function main(argv) {
     return;
   }
 
-  const bilan = await boucle({
+  // Branchement GitHub : sans --repo, les instances tournent mais ne publient ni ne fusionnent (lot 1 et 2)
+  const liaison = o.repo ? await liaisonGithub(o.repo) : {};
+  const bilan = await boucleParallele({
     charger, src: features, racine: RACINE, base: o.instances, max: o.max,
     runner: async ({ ticket, dossier }) => lancerClaude({ dossier, ticket }),
     journal: e => console.log('Terminé :', JSON.stringify(e)),
+    ...liaison,
   });
   for (const b of bilan) console.log(JSON.stringify(b));
 }
