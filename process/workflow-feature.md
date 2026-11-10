@@ -19,6 +19,14 @@ le ticket (`--statut`, `--etape`, `--agent`) et l'agent laisse un commentaire de
 Chaque mission confiée à un agent commence par `Filiale : <nom> — dossier <chemin>`, puis
 `Ticket : <ID>`, le mode pour `qa`, et les chemins des livrables précédents.
 
+## Étapes désactivées
+
+Le CEO peut désactiver une ou plusieurs étapes (1 à 9) pour un ticket, dans la fiche du ticket du Siège (cases « Étapes
+du circuit ») : par exemple pas de plan de tests (3) ni de recette (5) pour un petit changement. L'étape 0 (cadrage)
+reste obligatoire. Le directeur saute une étape désactivée : l'étape suivante est `node siege/backlog.js suivante <ID>
+--apres <n>`. La garde refuse aussi une mission dont l'étape est désactivée (`node siege/backlog.js etapes <ID>`).
+Désactiver la revue (6) ou la sécurité (7) reste possible, mais le Siège le signale : c'est une décision à assumer.
+
 ## Variantes
 
 - **Ticket Groupe (`GRP-…`)** : 0 → 2 (l'architecte écrit le contrat dans `portfolio/interfaces.md` et la

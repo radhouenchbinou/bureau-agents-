@@ -21,6 +21,8 @@ const COLLECTIONS = {
       priorite: { type: 'choix', libelle: 'Priorité', options: ['Haute', 'Moyenne', 'Basse'], defaut: 'Moyenne' },
       etape: { type: 'choix', libelle: 'Étape', options: ETAPES },
       dependances: { type: 'liste', libelle: 'Dépend de', format: ID_FEATURE },
+      // Étapes du circuit désactivées pour ce ticket (1 à 9 ; l'étape 0 Cadrage reste obligatoire)
+      etapes_desactivees: { type: 'liste', libelle: 'Étapes désactivées', format: /^[1-9]$/ },
       // Feature sur plusieurs filiales : un ticket parent (souvent GRP) et un ticket enfant par filiale, livrés ensemble
       parent: { type: 'texte', libelle: 'Parent', max: 7, format: ID_FEATURE },
       // Pull request du ticket (« owner/repo#12 ») : tenue par siege/github.js seulement
@@ -104,6 +106,18 @@ function prete(e, features) {
     return d === e.parent && parseInt(x.etape, 10) >= 3;
   });
 }
+
+// Étapes désactivées d'un ticket, en nombres (ex. [3, 5] = pas de plan de tests ni de recette)
+const etapesDesactivees = e => (Array.isArray(e && e.etapes_desactivees) ? e.etapes_desactivees : []).map(Number).filter(n => n >= 1 && n <= 9);
+const etapeDesactivee = (e, n) => etapesDesactivees(e).includes(Number(n));
+// Prochaine étape active après l'étape `apres` (numéro) ; null s'il n'en reste aucune
+function etapeSuivante(e, apres) {
+  const off = etapesDesactivees(e);
+  for (let n = Number(apres) + 1; n < ETAPES.length; n++) if (!off.includes(n)) return { n, nom: ETAPES[n] };
+  return null;
+}
+// Numéro d'étape à partir de son libellé (« 4 · Développement » → 4)
+const numeroEtape = s => { const m = /^\s*(\d)\b/.exec(String(s || '')); return m ? Number(m[1]) : null; };
 
 // Ordre de priorité : rang croissant (1 = le plus urgent), sans rang à la fin, puis identifiant
 const parRang = (a, b) => (a.rang || Infinity) - (b.rang || Infinity) || a.id.localeCompare(b.id);
@@ -223,4 +237,5 @@ class SourceFichier {
 }
 
 module.exports = { COLLECTIONS, ETAPES, ID_FEATURE, ErreurBacklog, valider, complet, prete, file, reclasser, parRang, prochainId, SourceFichier,
+  etapesDesactivees, etapeDesactivee, etapeSuivante, numeroEtape,
   commentaire, enLigne, depuisLigne, questionOuverte, TYPES_COMMENTAIRE };

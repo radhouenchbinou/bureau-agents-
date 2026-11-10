@@ -1,0 +1,104 @@
+{
+  "sandbox_obligatoire": true,
+  "liste": [
+    {
+      "id": "AUT-001",
+      "type": "domaine",
+      "valeur": "slack.com",
+      "role": "",
+      "motif": "Slack : notifications du Siège et échanges de l'équipe",
+      "ajoutee_le": "2026-11-10T00:00:00.000Z",
+      "par": "CEO"
+    },
+    {
+      "id": "AUT-002",
+      "type": "domaine",
+      "valeur": "api.slack.com",
+      "role": "",
+      "motif": "Slack : API des notifications du Siège",
+      "ajoutee_le": "2026-11-10T00:00:00.000Z",
+      "par": "CEO"
+    },
+    {
+      "id": "AUT-003",
+      "type": "domaine",
+      "valeur": "hooks.slack.com",
+      "role": "",
+      "motif": "Slack : webhooks entrants des notifications du Siège",
+      "ajoutee_le": "2026-11-10T00:00:00.000Z",
+      "par": "CEO"
+    },
+    {
+      "id": "AUT-004",
+      "type": "domaine",
+      "valeur": "registry.npmjs.org",
+      "role": "",
+      "motif": "Dépendances npm : installation des paquets des projets (npm ci, npm install)",
+      "ajoutee_le": "2026-11-10T00:00:00.000Z",
+      "par": "CEO"
+    },
+    {
+      "id": "AUT-005",
+      "type": "domaine",
+      "valeur": "repo.maven.apache.org",
+      "role": "",
+      "motif": "Dépendances Maven : dépôt central Maven",
+      "ajoutee_le": "2026-11-10T00:00:00.000Z",
+      "par": "CEO"
+    },
+    {
+      "id": "AUT-006",
+      "type": "domaine",
+      "valeur": "repo1.maven.org",
+      "role": "",
+      "motif": "Dépendances Maven : miroir du dépôt central Maven",
+      "ajoutee_le": "2026-11-10T00:00:00.000Z",
+      "par": "CEO"
+    },
+    {
+      "id": "AUT-007",
+      "type": "domaine",
+      "valeur": "central.sonatype.com",
+      "role": "",
+      "motif": "Dépendances Maven : portail Sonatype Central",
+      "ajoutee_le": "2026-11-10T00:00:00.000Z",
+      "par": "CEO"
+    },
+    {
+      "id": "AUT-008",
+      "type": "domaine",
+      "valeur": "plugins.gradle.org",
+      "role": "",
+      "motif": "Dépendances Gradle : plugins Gradle",
+      "ajoutee_le": "2026-11-10T00:00:00.000Z",
+      "par": "CEO"
+    },
+    {
+      "id": "AUT-009",
+      "type": "domaine",
+      "valeur": "services.gradle.org",
+      "role": "",
+      "motif": "Dépendances Gradle : distribution du wrapper Gradle",
+      "ajoutee_le": "2026-11-10T00:00:00.000Z",
+      "par": "CEO"
+    },
+    {
+      "id": "AUT-010",
+      "type": "domaine",
+      "valeur": "pypi.org",
+      "role": "",
+      "motif": "Dépendances Python : index PyPI (pip install)",
+      "ajoutee_le": "2026-11-10T00:00:00.000Z",
+      "par": "CEO"
+    },
+    {
+      "id": "AUT-011",
+      "type": "domaine",
+      "valeur": "files.pythonhosted.org",
+      "role": "",
+      "motif": "Dépendances Python : téléchargement des paquets PyPI",
+      "ajoutee_le": "2026-11-10T00:00:00.000Z",
+      "par": "CEO"
+    }
+  ]
+}
