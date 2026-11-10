@@ -58,8 +58,8 @@ test('boucle : ticket sans risque, instance dans son worktree, rapport écrit, p
     runner: async ({ dossier }) => { fs.writeFileSync(path.join(dossier, 'page.txt'), 'ok'); return { ok: true }; },
   });
   assert.strictEqual(bilan[0].ok, true);
-  assert.ok(fs.existsSync(path.join(r, 'docs', 'rapports', 'EIA-001-directeur.md')), 'rapport du directeur');
-  assert.match(fs.readFileSync(path.join(r, 'docs', 'rapports', 'EIA-001-directeur.md'), 'utf8'), /page\.txt/);
+  assert.ok(fs.existsSync(bilan[0].rapport), 'rapport du directeur');
+  assert.match(fs.readFileSync(bilan[0].rapport, 'utf8'), /page\.txt/);
   assert.strictEqual((await src.lister())[0].statut, 'À faire', 'le ticket n\'est pas fermé : pas de fusion dans le lot 1');
 });
 

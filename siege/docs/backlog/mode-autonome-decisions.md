@@ -30,3 +30,7 @@ agents responsables de les fournir. Le rapport est écrit dans `docs/rapports/<I
 fichiers modifiés, taux de criticité et son motif, instance, résultat des tests, décision de fusion, questions posées
 aux agents et leurs réponses. Lot 1 : le rapport est produit à partir des données de la boucle ; la demande de
 détails aux agents viendra dans un lot suivant.
+
+## Articulation avec ADR-001 (questions du product-owner)
+- ADR-001 (statut « Proposé ») : le product-owner découpe les specs, et un juge externe (Codex, autre famille de modèles) note les réponses aux questions ouvertes. Seuil de 80 pour retenir une réponse ; désaccord ou panne = escalade au CEO.
+- Ce document : le taux de criticité d'une tâche du mode autonome, seuil de 90 %. C'est un autre seuil, sur une autre décision : ne pas les confondre.
