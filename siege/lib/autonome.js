@@ -8,6 +8,7 @@ const { file } = require('./backlog');
 const crit = require('./criticite');
 const wt = require('./worktrees');
 const fusionAuto = require('./fusion-auto');
+const par = require('./parallele');
 
 const EXCLUS = ['Bloqué', 'En revue', 'Livré', 'En cours'];
 
@@ -49,11 +50,21 @@ function rediger({ ticket, branche, dossier, fichiers, criticite, ok, fusion = '
 //   runner({ ticket, dossier, branche }) -> { ok, action?, avisModele? }   (le lanceur d'agent, injecté)
 // publier({ ticket, branche, dossier, fichiers }) -> { pr, feux: { revue, securite } }   (optionnel : sans lui, pas de PR ni de fusion)
 // fusionner({ ticket, pr })                       -> fusionne la PR                       (optionnel, lot 4)
-async function boucle({ charger, src, racine, base, runner, max = 1, journal = () => {}, publier = null, fusionner = null }) {
+// Livraison d'une instance : publier la PR, lire les feux, fusionner si la décision est positive
+function livraison(publier, fusionner) {
+  return async ({ ticket, branche, dossier, fichiers, criticite }) => {
+    const pub = await publier({ ticket, branche, dossier, fichiers });
+    const dec = await fusionAuto.fusionnerSiPret({ criticite, feux: pub.feux, fusionner: () => fusionner({ ticket, pr: pub.pr }) });
+    return { pr: pub.pr, fusionne: dec.fusionne, motif: dec.motif };
+  };
+}
+
+async function boucle({ charger, src, racine, base, runner, max = 1, journal = () => {}, publier = null, fusionner = null, livrer = null, ticket = null }) {
+  const livrerFn = livrer || (publier ? livraison(publier, fusionner) : null);
   const bilan = [];
   for (let i = 0; i < max; i++) {
-    const { features, bugs } = await charger();
-    const t = choisir(features, bugs);
+    let t = ticket;
+    if (!t) { const { features, bugs } = await charger(); t = choisir(features, bugs); }
     if (!t) { bilan.push({ fin: 'rien à faire' }); break; }
 
     const avant = crit.evaluer({ action: t.titre });
@@ -67,6 +78,7 @@ async function boucle({ charger, src, racine, base, runner, max = 1, journal = (
     try { dossier = wt.creer({ racine, base, id, branche }); }
     catch (e) { await mettreEnAttente(src, t, 'Worktree impossible : ' + String(e.message).slice(0, 160)); bilan.push({ ticket: t.id, attente: true, erreur: 'worktree' }); continue; }
 
+    await src.modifier(t.id, { statut: 'En cours' });   // un ticket lancé n'est plus repris par la file
     let res;
     try { res = await runner({ ticket: t, dossier, branche }); }
     catch (e) { await mettreEnAttente(src, t, 'Instance en erreur : ' + String(e.message).slice(0, 160)); bilan.push({ ticket: t.id, attente: true, erreur: 'instance' }); continue; }
@@ -80,19 +92,19 @@ async function boucle({ charger, src, racine, base, runner, max = 1, journal = (
     }
 
     let fusion = 'non faite (PR seulement)';
-    if (publier) {
-      let pub;
-      try { pub = await publier({ ticket: t, branche, dossier, fichiers }); }
-      catch (e) { await mettreEnAttente(src, t, 'Publication impossible : ' + String(e.message).slice(0, 160)); bilan.push({ ticket: t.id, attente: true, erreur: 'publication' }); continue; }
-      const dec = await fusionAuto.fusionnerSiPret({ criticite: apres, feux: pub.feux, fusionner: () => fusionner({ ticket: t, pr: pub.pr }) });
-      if (!dec.fusionne) {
-        await mettreEnAttente(src, t, `PR ${pub.pr} ouverte, non fusionnée : ${dec.motif}.`);
-        bilan.push({ ticket: t.id, attente: true, pr: pub.pr, motif: dec.motif }); continue;
+    if (livrerFn) {
+      let l;
+      try { l = await livrerFn({ ticket: t, branche, dossier, fichiers, criticite: apres }); }
+      catch (e) { await mettreEnAttente(src, t, 'Livraison impossible : ' + String(e.message).slice(0, 160)); bilan.push({ ticket: t.id, attente: true, erreur: 'livraison' }); continue; }
+      if (!l.fusionne) {
+        await mettreEnAttente(src, t, `PR ${l.pr} ouverte, non fusionnée : ${l.motif}.`);
+        bilan.push({ ticket: t.id, attente: true, pr: l.pr, motif: l.motif }); continue;
       }
-      fusion = `fusionnée (${dec.motif}) — PR ${pub.pr}`;
+      fusion = `fusionnée (${l.motif}) — PR ${l.pr}`;
       await src.modifier(t.id, { statut: 'En revue' });
-      await src.commenter(t.id, { auteur: 'directeur', texte: `Mode autonome : PR ${pub.pr} fusionnée (${dec.motif}).` });
+      await src.commenter(t.id, { auteur: 'directeur', texte: `Mode autonome : PR ${l.pr} fusionnée (${l.motif}).` });
     }
+    if (!livrerFn) await src.modifier(t.id, { statut: 'En revue' });   // sans livraison : instance terminée, PR à relire
     const rapport = rediger({ ticket: t, branche, dossier, fichiers, criticite: apres, ok: !!res.ok, fusion });
     bilan.push({ ticket: t.id, branche, ok: !!res.ok, rapport });
     journal({ ticket: t.id, branche, ok: !!res.ok, rapport });
@@ -100,4 +112,33 @@ async function boucle({ charger, src, racine, base, runner, max = 1, journal = (
   return bilan;
 }
 
-module.exports = { boucle, choisir, rediger };
+// Parallélisme (lot 5) : des instances tournent en même temps, dans leurs worktrees ; le nombre suit la capacité de la
+// machine (recalculée avant chaque lancement). Les livraisons (PR et fusion) passent une à une, par un verrou.
+// Un ticket en vol n'est jamais repris par une autre instance.
+async function boucleParallele({ charger, src, racine, base, runner, publier = null, fusionner = null, max = 1, capacite = () => par.capacite(), intervalleMs = 30000, journal = () => {} }) {
+  const bilan = [], enVol = new Map(), serie = par.verrou();
+  const livrer = publier ? (a => serie(() => livraison(publier, fusionner)(a))) : null;
+  let lances = 0, plusDeTicket = false;
+  for (;;) {
+    while (enVol.size < capacite() && lances < max && !plusDeTicket) {
+      const { features, bugs } = await charger();
+      const t = choisir(features.filter(f => !enVol.has(f.id)), bugs);
+      if (!t) { plusDeTicket = true; break; }
+      lances++;
+      const p = boucle({ charger, src, racine, base, runner, max: 1, journal, livrer, ticket: t })
+        .then(b => { bilan.push(...b); })
+        .catch(e => { bilan.push({ ticket: t.id, erreur: String(e.message).slice(0, 160) }); })
+        .finally(() => enVol.delete(t.id));
+      enVol.set(t.id, p);
+    }
+    if (enVol.size === 0) {
+      if (plusDeTicket || lances >= max) break;
+      await new Promise(r => setTimeout(r, intervalleMs));   // capacité nulle : on attend
+      continue;
+    }
+    await Promise.race([...enVol.values(), new Promise(r => setTimeout(r, intervalleMs))]);
+  }
+  return bilan;
+}
+
+module.exports = { boucle, boucleParallele, choisir, rediger, livraison };
