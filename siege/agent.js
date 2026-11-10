@@ -8,7 +8,9 @@
 //  - ni jeton GitHub ni accès au backlog pour l'agent : la passation est inscrite sur le ticket par cet outil, et le
 //    push (facultatif, --pousser) passe par node siege/github.js avec le jeton du rôle.
 'use strict';
-const fs = require('fs'), path = require('path'), os = require('os'), { spawn, execFileSync } = require('child_process');
+const fs = require('fs'), path = require('path'), os = require('os'), { spawn } = require('child_process');
+const { options, ErreurSiege } = require('./lib/options');
+const identite = require('./lib/identite');
 const moteurs = require('./lib/moteurs'), copilote = require('./lib/copilote'), { filiales } = require('./lib/registre'), cfg = require('./lib/config');
 
 const RACINE = process.env.SIEGE_RACINE || path.resolve(__dirname, '..');
@@ -24,7 +26,6 @@ const AIDE = `Agents d'un autre moteur — usage : node siege/agent.js <commande
 `;
 class ErreurAgent extends Error {}
 const refus = m => { throw new ErreurAgent(m); };
-const opts = a => { const o = {}; for (let i = 0; i < a.length; i++) if (a[i].startsWith('--')) o[a[i].slice(2)] = a[i + 1] !== undefined && !a[i + 1].startsWith('--') ? a[++i] : ''; return o; };
 
 function consigne({ role, filiale, ticket, etape, mission, moteur }) {
   const defRole = (() => { try { return fs.readFileSync(path.join(RACINE, '.claude', 'agents', role + '.md'), 'utf8').replace(/^---[\s\S]*?---\s*/, ''); } catch { return ''; } })();
@@ -46,6 +47,10 @@ Règles
 Ton rôle (référence)
 ${defRole.slice(0, 6000)}`;
 }
+
+// Journal par agent (EIA-017) : jamais d'exception ni d'effet sur le lancement (R8)
+const ouvrirJournal = (o, f, moteur, modele) => { try { return require('./lib/journal-agents').ouvrir({ role: o.role, filiale: f.nom, ticket: o.ticket, etape: o.etape, moteur, modele }); } catch { return null; } };
+const fermerJournal = (id, o, debut, { code, sortie, interrompu }) => { try { if (id) require('./lib/journal-agents').clore(o.role, id, { code, sortie, duree: (Date.now() - debut) / 1000, etat: interrompu ? 'interrompu' : undefined }); } catch {} };
 
 async function lancer(o) {
   const nomMoteur = o.moteur || '', liste = await moteurs.detecter(), m = liste.find(x => x.nom === nomMoteur);
@@ -72,12 +77,14 @@ async function lancer(o) {
   const args = ['exec', '-m', mod.id, '-C', dossier, '-s', 'workspace-write', '-c', 'sandbox_workspace_write.network_access=false',
     '--skip-git-repo-check', '--ephemeral', '--ignore-user-config', '--color', 'never', '-o', dernier,
     consigne({ role: o.role, filiale: f, ticket: o.ticket, etape: o.etape, mission, moteur: `${m.libelle} (${mod.id})` })];
-  const debut = Date.now();
+  const debut = Date.now(), jid = ouvrirJournal(o, f, nomMoteur, mod.id); let sortie = '', coupe = false;
   const code = await new Promise((ok, ko) => {
-    const p = spawn(moteurs.MOTEURS[nomMoteur].bin(), args, { cwd: dossier, stdio: ['ignore', journal, journal] });
-    const t = setTimeout(() => p.kill('SIGTERM'), DUREE_MAX_MS);
-    p.on('error', e => { clearTimeout(t); ko(new ErreurAgent(`${m.libelle} n'a pas pu démarrer : ${e.message}`)); });
-    p.on('exit', c => { clearTimeout(t); ok(c); });
+    // stdout passe en pipe pour être recopié dans agents-externes.log (inchangé) et dans le journal par agent
+    const p = spawn(moteurs.MOTEURS[nomMoteur].bin(), args, { cwd: dossier, stdio: ['ignore', 'pipe', journal] });
+    p.stdout.on('data', d => { fs.writeSync(journal, d); sortie = (sortie + d).slice(-20000); });
+    const t = setTimeout(() => { coupe = true; p.kill('SIGTERM'); }, DUREE_MAX_MS);
+    p.on('error', e => { clearTimeout(t); fermerJournal(jid, o, debut, { code: null, sortie: e.message }); ko(new ErreurAgent(`${m.libelle} n'a pas pu démarrer : ${e.message}`)); });
+    p.on('close', c => { clearTimeout(t); fermerJournal(jid, o, debut, { code: c, sortie, interrompu: coupe }); ok(c); });
   });
   fs.closeSync(journal);
   let passation = ''; try { passation = fs.readFileSync(dernier, 'utf8').trim(); fs.unlinkSync(dernier); } catch {}
@@ -97,14 +104,15 @@ async function copilot({ m, mod, o, f, dossier, prive, mission }) {
   const args = [...x.avant, '-p', consigne({ role: o.role, filiale: f, ticket: o.ticket, etape: o.etape, mission, moteur: `${m.libelle} (${mod.id})` }),
     '--agent', o.role, '--add-dir', RACINE, '--model', mod.id, '--silent', '--no-ask-user', '--trust-folder',
     '--allow-tool', 'write', '--allow-tool', 'shell', '--deny-tool', 'url'];
-  const env = { ...copilote.env(), SIEGE_RACINE: RACINE, SIEGE_ROLE: o.role, SIEGE_PRIVE: prive, SIEGE_SESSION_AUTO: '1' };
-  const debut = Date.now(); let sortie = '';
+  const debut = Date.now(), jid = ouvrirJournal(o, f, 'copilot', mod.id);
+  const env = { ...copilote.env(), SIEGE_RACINE: RACINE, SIEGE_ROLE: o.role, SIEGE_PRIVE: prive, SIEGE_SESSION_AUTO: '1', ...(jid ? { SIEGE_EXECUTION: jid } : {}) };
+  let sortie = '', coupe = false;
   const code = await new Promise((ok, ko) => {
     const p = spawn(x.cmd, args, { cwd: dossier, env, stdio: ['ignore', 'pipe', journal], windowsHide: true });
     p.stdout.on('data', d => { sortie += d; fs.writeSync(journal, d); });
-    const t = setTimeout(() => p.kill('SIGTERM'), DUREE_MAX_MS);
-    p.on('error', e => { clearTimeout(t); ko(new ErreurAgent(`${m.libelle} n'a pas pu démarrer : ${e.message}`)); });
-    p.on('exit', c => { clearTimeout(t); ok(c); });
+    const t = setTimeout(() => { coupe = true; p.kill('SIGTERM'); }, DUREE_MAX_MS);
+    p.on('error', e => { clearTimeout(t); fermerJournal(jid, o, debut, { code: null, sortie: e.message }); ko(new ErreurAgent(`${m.libelle} n'a pas pu démarrer : ${e.message}`)); });
+    p.on('close', c => { clearTimeout(t); fermerJournal(jid, o, debut, { code: c, sortie, interrompu: coupe }); ok(c); });
   });
   fs.closeSync(journal);
   const passation = sortie.trim().split('\n').slice(-40).join('\n'), duree = Math.round((Date.now() - debut) / 1000);
@@ -117,14 +125,16 @@ async function terminer({ m, mod, o, f, duree, code, passation }) {
   await cfg.source(n).commenter(o.ticket, { auteur: o.role, texte: `Passation (${m.libelle} ${mod.id}, ${duree} s) · ${passation.replace(/\s+/g, ' ').slice(0, 1800) || '(aucun message)'}` });
   let pousse = '';
   if (o.pousser) {
-    try { pousse = execFileSync(process.execPath, [path.join(__dirname, 'github.js'), 'pousser', '--role', o.role, '--filiale', f.nom, '--branche', o.pousser], { cwd: RACINE, encoding: 'utf8' }).trim(); }
-    catch (e) { pousse = '⚠ push impossible : ' + String(e.stderr || e.message).trim().split('\n').pop(); }
+    // En processus (identité = rôle lancé, limité à ROLES) : un sous-processus de github.js serait refusé faute d'entrée d'identité
+    try { pousse = await require('./github').pousserBranche({ racine: RACINE, role: o.role, filiale: f.nom, branche: o.pousser }); }
+    catch (e) { pousse = '⚠ push impossible : ' + String(e.message).trim().split('\n').pop(); }
   }
   return { moteur: m.libelle, modele: mod.id, duree, code, passation, pousse };
 }
 
 async function main(argv) {
-  const [cmd, ...a] = argv, o = opts(a);
+  const [cmd, ...a] = argv, { o } = options(a);
+  identite.resoudre({ outil: 'agent', args: argv });
   if (!cmd || cmd === 'aide') return console.log(AIDE);
   if (cmd === 'moteurs') {
     for (const m of await moteurs.detecter({ forcer: 'actualiser' in o }))
@@ -138,5 +148,5 @@ async function main(argv) {
   }
   refus('Commande inconnue : ' + cmd + '\n\n' + AIDE);
 }
-if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurAgent || e instanceof moteurs.ErreurMoteur || e instanceof copilote.ErreurCopilot || e.name === 'ErreurBacklog' ? 'Erreur : ' + e.message : e); process.exit(1); });
+if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof ErreurAgent || e instanceof ErreurSiege || e instanceof moteurs.ErreurMoteur || e instanceof copilote.ErreurCopilot || e.name === 'ErreurBacklog' ? 'Erreur : ' + e.message : e); process.exit(1); });
 module.exports = { main, lancer, consigne, ROLES };

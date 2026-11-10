@@ -1,4 +1,5 @@
 'use strict';
+require('./_humain');
 // Teams de bout en bout contre un faux Microsoft (connexion par code d'appareil + Graph) : accès, demande, validation
 // par « oui », consigne et décision du CEO par texte, ticket ; historique ignoré, messages du Directeur ignorés, jeton rafraîchi.
 const test = require('node:test'), assert = require('node:assert'), fs = require('fs'), os = require('os'), path = require('path'), http = require('http');

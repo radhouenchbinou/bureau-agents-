@@ -4,6 +4,8 @@
 'use strict';
 const path = require('path');
 const gh = require('./lib/github');
+const { options, ErreurSiege } = require('./lib/options');
+const identite = require('./lib/identite');
 const { filiales } = require('./lib/registre');
 const garde = require('./lib/garde');
 const cfgBacklog = require('./lib/config');
@@ -15,15 +17,20 @@ const AIDE = `GitHub des agents — usage : node siege/github.js <commande> --ro
   etat                                                     configuration et repos déclarés
   pousser --role R --filiale F --branche feature/ID        pousse la branche (jamais main)
   pr --role R --filiale F --ticket ID --branche feature/ID --titre "…" [--corps "…"]   ouvre la PR vers main et l'inscrit sur le ticket
-  statut --role R --filiale F --pr N --contexte revue|securite --etat success|failure [--description "…"]
+  statut --role R --filiale F --pr N --sha <commit relu> --contexte revue|securite --etat success|failure [--description "…"]
   fusionner --role devops --filiale F --pr N               fusionne si le CEO a approuvé et revue + sécurité au vert
   fusionner --role devops --ticket PARENT                  livraison groupée : toutes les PR du lot, ou aucune
 `;
-const opts = a => { const o = {}; for (let i = 0; i < a.length; i++) if (a[i].startsWith('--')) o[a[i].slice(2)] = a[i + 1] !== undefined && !a[i + 1].startsWith('--') ? a[++i] : ''; return o; };
 const CONTEXTE_DU_ROLE = { reviewer: 'revue', 'rssi-devsecops': 'securite' };
 
+// C6 : refuse le feu si la tête de la PR n'est plus le commit relu
+function verifierTeteRelue(p, sha, pr) {
+  if (p.head.sha !== sha) throw new gh.ErreurGithub(`La tête de la PR #${pr} a bougé (${p.head.sha} au lieu de ${sha}) : feu refusé, relecture nécessaire`);
+}
+
 async function main(argv) {
-  const [cmd, ...a] = argv, o = opts(a);
+  const [cmd, ...a] = argv, { o } = options(a);
+  const acteur = identite.resoudre({ outil: 'github', args: argv });
   if (!cmd || cmd === 'aide') return console.log(AIDE);
   const politique = garde.charger(RACINE), c = gh.config(RACINE), fil = await filiales(path.join(RACINE, 'portfolio', 'filiales.md'));
   if (cmd === 'etat') {
@@ -31,7 +38,8 @@ async function main(argv) {
     for (const f of fil) console.log(`  ${f.nom.padEnd(12)} ${f.repo.padEnd(22)} → ${(c.repos || {})[f.repo] || '(aucun repo GitHub)'}`);
     return;
   }
-  const role = o.role; if (!role) throw new gh.ErreurGithub('--role obligatoire');
+  // Agent : le rôle est celui que la garde impose (--role facultatif, égal sinon refus) ; humain : --role obligatoire
+  const role = identite.imposer(acteur, o.role, { outil: 'github', sous_commande: cmd }); if (!role) throw new gh.ErreurGithub('--role obligatoire');
   if (cmd === 'fusionner' && o.ticket !== undefined) return livraisonGroupee(o, role, c, politique, fil);
   const { filiale, repo } = gh.repoDeFiliale(c, fil, o.filiale);
   const jeton = await gh.jetonRole(c, politique, role, repo);
@@ -57,8 +65,11 @@ async function main(argv) {
     case 'statut': {
       if (CONTEXTE_DU_ROLE[role] !== o.contexte) throw new gh.ErreurGithub(`Le rôle ${role} ne pose pas le feu « ${o.contexte} »`);
       if (!['success', 'failure'].includes(o.etat)) throw new gh.ErreurGithub('--etat success ou failure');
+      // C6 : le feu porte sur le commit relu (--sha) ; refus si la tête de la PR a bougé depuis la revue
+      if (!/^[0-9a-f]{40}$/.test(o.sha || '')) throw new gh.ErreurGithub('--sha <commit relu> obligatoire (40 caractères hexadécimaux)');
       const p = await gh.appel('GET', `/repos/${repo}/pulls/${Number(o.pr)}`, jeton);
-      await gh.appel('POST', `/repos/${repo}/statuses/${p.head.sha}`, jeton, { state: o.etat, context: 'agents/' + o.contexte, description: String(o.description || role).slice(0, 140) });
+      verifierTeteRelue(p, o.sha, o.pr);
+      await gh.appel('POST', `/repos/${repo}/statuses/${o.sha}`, jeton, { state: o.etat, context: 'agents/' + o.contexte, description: String(o.description || role).slice(0, 140) });
       return console.log(`Feu agents/${o.contexte} = ${o.etat} sur la PR #${o.pr}`);
     }
     case 'fusionner': {
@@ -102,5 +113,13 @@ async function livraisonGroupee(o, role, c, politique, fil) {
   throw new gh.ErreurGithub(etat);
 }
 
-if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof gh.ErreurGithub ? 'Erreur : ' + e.message : 'Erreur : ' + (e.message || e)); process.exit(1); });
-module.exports = { main };
+if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e instanceof gh.ErreurGithub || e instanceof ErreurSiege ? 'Erreur : ' + e.message : 'Erreur : ' + (e.message || e)); process.exit(1); });
+// Pousse la branche d'une filiale avec le jeton du rôle (appelé en processus par agent.js : un sous-processus de cet outil
+// serait refusé faute d'entrée d'identité)
+async function pousserBranche({ racine = RACINE, role, filiale: nom, branche }) {
+  const politique = garde.charger(racine), c = gh.config(racine), fil = await filiales(path.join(racine, 'portfolio', 'filiales.md'));
+  const { filiale, repo } = gh.repoDeFiliale(c, fil, nom);
+  gh.pousser(path.join(racine, filiale.repo), repo, branche || '', await gh.jetonRole(c, politique, role, repo));
+  return `Branche ${branche} poussée sur ${repo}`;
+}
+module.exports = { main, pousserBranche, verifierTeteRelue };

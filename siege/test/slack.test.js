@@ -1,4 +1,5 @@
 'use strict';
+require('./_humain');
 // Slack de bout en bout : fausse API Web + faux serveur Socket Mode (WebSocket minimal), enveloppes acquittées,
 // accès, demande, validation par bouton, escalade au CEO avec réponse en fil, ticket ; filtres (bots, canaux publics).
 const test = require('node:test'), assert = require('node:assert'), fs = require('fs'), os = require('os'), path = require('path'), http = require('http'), crypto = require('crypto');

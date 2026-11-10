@@ -1,5 +1,8 @@
 {
   "_genere_par": "node siege/droits.js — ne pas modifier à la main : Siège › Droits",
+  "env": {
+    "SIEGE_CONTEXTE": "agent"
+  },
   "permissions": {
     "deny": [
       "Read(~/.siege/**)",

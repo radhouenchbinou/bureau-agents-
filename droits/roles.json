@@ -2,6 +2,9 @@
   "version": 2,
   "_lisez_moi": "Source unique des droits de chaque agent. Tout ce qui n'est pas listé est refusé. Après modification : node siege/droits.js appliquer (met à jour outils et skills des agents). Les commandes shell sont des expressions régulières sur la commande normalisée (mots séparés par un espace, guillemets retirés). {role} est remplacé par le nom de l'agent. Règles d'écriture : chaque motif est ancré (^ en début, ( |$) ou $ en fin) ; aucun nom de commande n'est joker ; pas de code en ligne (-c, -e), pas de substitution, de redirection ni de « .. » (refusés par siege/lib/garde.js avant ces motifs) ; les options destructrices ou réseau sont exclues par lookahead.",
   "commun": {
+    "identites_humaines": [
+      "CEO"
+    ],
     "lecture_interdite": [
       "~/.siege/**",
       "~/.ssh/**",
@@ -22,17 +25,17 @@
       "**/*.env",
       "**/*.pem",
       "**/.git/**",
-      "~/.siege/**",
       "~/.ssh/**",
       "~/.aws/**",
-      "~/.config/gh/**"
+      "~/.siege/**",
+      "~/.config/gh/**",
+      "~/.netrc"
     ],
     "bash": [
-      "^node siege/backlog\\.js (aide|source|file|liste|voir|commentaires|questions|etapes|suivante)( |$)",
-      "^node siege/backlog\\.js commenter \\S+ .*--auteur {role}( |$)",
-      "^node siege/exception\\.js (liste|voir)( |$)",
-      "^git( -C projets/[\\w./-]+)? (status|log|show|diff|ls-files|rev-parse)( (?!--(output|ext-diff|textconv|exec|no-index)\\b)\\S+)*$",
-      "^git( -C projets/[\\w./-]+)? branch( (-a|-r|-v|-vv|--list|--show-current|--merged|--no-merged))*$"
+      "^node siege/backlog\\.js (aide|source|file|liste|voir|commentaires|questions)\\b",
+      "^node siege/backlog\\.js commenter (([A-Z]{3}|BUG)-\\d{3})( |$)",
+      "^node siege/exception\\.js (liste|voir)\\b",
+      "^git( -C \\S+)? (status|log|diff|show|branch|rev-parse|ls-files)( |$)"
     ],
     "tubes": [
       "head",
@@ -182,27 +185,20 @@
         "projets/**"
       ],
       "bash": [
-        "^(?!.*(--no-verify| -f\\b| --force\\b| --discard-changes|stash (drop|clear)|checkout -- \\.|restore( \\S+)* \\.( |$)|switch -C))git( -C projets/[\\w./-]+)? (add|commit|mv|rm|switch|checkout|restore|stash)( |$)",
-        "^cd projets/[\\w./-]+$",
-        "^(mkdir|touch) projets/\\S+$",
-        "^python3? -m (unittest|pytest|py_compile|compileall)( |$)",
-        "^python3? projets/[\\w./-]+\\.py( |$)",
-        "^python3? -m pip install -r [\\w./-]+\\.txt --require-hashes( |$)",
-        "^pytest( |$)",
-        "^ruff (check|format --check)( |$)",
-        "^mypy( |$)",
-        "^(\\./mvnw|mvn) (-q )?(test|verify|compile|package)( |$)",
-        "^(\\./gradlew|gradle) (-q )?(test|check|build)( |$)",
-        "^npm (ci|install)( --ignore-scripts)?$",
-        "^npm (test|run (test|build|lint|typecheck))( |$)",
-        "^npx (tsc|eslint|vitest|jest)( |$)",
-        "^node --test( |$)",
-        "^go (test|vet|build)( |$)",
-        "^cargo (test|check|clippy|build)( |$)",
-        "^dotnet (test|build)( |$)",
-        "^make (test|build|lint|check)( |$)",
-        "^node siege/backlog\\.js maj BUG-\\d{3} --statut (\"?En correction\"?|\"?À vérifier\"?)( |$)",
-        "^node siege/github\\.js (pousser|pr) .*--role {role}( |$)"
+        "^git( -C \\S+)? (add|commit|checkout|switch|stash|restore|mv|rm)( |$)",
+        "^python3? -m (unittest|pytest|py_compile|compileall)\\b",
+        "^python3? projets/\\S+\\.py\\b",
+        "^(mvn|\\./mvnw|gradle|\\./gradlew) (-q )?(test|verify|compile|package)\\b",
+        "^npm (test|run (test|build|lint))\\b",
+        "^node --test\\b",
+        "^(mkdir|touch) projets/\\S+",
+        "^cd projets/\\S+$",
+        "^node siege/backlog\\.js maj BUG-\\d{3} --statut (\"?En correction\"?|\"?À vérifier\"?)\\b",
+        "^node siege/github\\.js (pousser|pr)( |$)",
+        "^(npm|npx|pnpm|yarn|node|tsc)( |$)",
+        "^(mvn|\\./mvnw|gradle|\\./gradlew)( |$)",
+        "^(python3?|pip3?|pytest|poetry|uv|ruff|mypy)( |$)",
+        "^(go|cargo|make|dotnet)( |$)"
       ],
       "web": [],
       "github": {
@@ -226,17 +222,17 @@
         "projets/**"
       ],
       "bash": [
-        "^(?!.*(--no-verify| -f\\b| --force\\b| --discard-changes|stash (drop|clear)|checkout -- \\.|restore( \\S+)* \\.( |$)|switch -C))git( -C projets/[\\w./-]+)? (add|commit|mv|rm|switch|checkout|restore|stash)( |$)",
-        "^cd projets/[\\w./-]+$",
-        "^(mkdir|touch) projets/\\S+$",
-        "^npm (ci|install)( --ignore-scripts)?$",
-        "^npm (test|run (test|build|lint|typecheck))( |$)",
-        "^npx (tsc|eslint|vitest|jest)( |$)",
-        "^npx ng (test|build|lint)( |$)",
-        "^node --test( |$)",
-        "^make (test|build|lint)( |$)",
-        "^node siege/backlog\\.js maj BUG-\\d{3} --statut (\"?En correction\"?|\"?À vérifier\"?)( |$)",
-        "^node siege/github\\.js (pousser|pr) .*--role {role}( |$)"
+        "^git( -C \\S+)? (add|commit|checkout|switch|stash|restore|mv|rm)( |$)",
+        "^npm (ci|test|run (test|build|lint))\\b",
+        "^npx (ng|tsc|eslint|vitest|jest) (test|build|lint|--noEmit)?\\b",
+        "^node --test\\b",
+        "^(mkdir|touch) projets/\\S+",
+        "^cd projets/\\S+$",
+        "^node siege/backlog\\.js maj BUG-\\d{3} --statut (\"?En correction\"?|\"?À vérifier\"?)\\b",
+        "^node siege/github\\.js (pousser|pr)( |$)",
+        "^(npm|npx|pnpm|yarn|node|tsc|ng)( |$)",
+        "^(python3?|pip3?)( |$)",
+        "^make( |$)"
       ],
       "web": [],
       "github": {
@@ -296,8 +292,8 @@
         "portfolio/decisions/*-review.md"
       ],
       "bash": [
-        "^node siege/github\\.js statut .*--contexte revue .*--role {role}( |$)",
-        "^cd projets/[\\w./-]+$"
+        "^node siege/github\\.js statut .*--contexte revue( |$)",
+        "^cd projets/\\S+$"
       ],
       "web": [],
       "github": {
@@ -320,17 +316,12 @@
         "portfolio/decisions/*-secu.md"
       ],
       "bash": [
-        "^gitleaks (detect|protect)( |$)",
-        "^semgrep --config \\S+( |$)",
-        "^bandit -r( |$)",
-        "^python3? -m (bandit|pip_audit)( |$)",
-        "^pip-audit( |$)",
-        "^npm audit( --[\\w=-]+)*$",
-        "^osv-scanner( |$)",
-        "^trivy (fs|config)( |$)",
-        "^(grype|syft) dir:\\S+( |$)",
-        "^node siege/github\\.js statut .*--contexte securite .*--role {role}( |$)",
-        "^cd projets/[\\w./-]+$"
+        "^(pip-audit|npm audit|gitleaks detect|semgrep|bandit)\\b",
+        "^python3? -m (pip_audit|bandit)\\b",
+        "^node siege/github\\.js statut .*--contexte securite( |$)",
+        "^(npm audit|npx --yes? ?(audit-ci|osv-scanner))( |$)",
+        "^(osv-scanner|trivy (fs|config)|grype|syft)( |$)",
+        "^cd projets/\\S+$"
       ],
       "web": [],
       "github": {

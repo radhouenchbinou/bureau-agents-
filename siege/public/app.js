@@ -2,7 +2,7 @@
 // Tout texte venu des données est inséré comme texte (jamais d'innerHTML avec des données).
 'use strict';
 (() => {
-  let E = null, vue = 'bureau', coll = 'features', filtre = { filiale: '', q: '' }, tiroirOuvert = false, glisse = null;
+  let E = null, vue = 'bureau', coll = 'features', filtre = { filiale: '', q: '' }, tiroirOuvert = false, glisse = null, vue25d = preferenceVue25d();
   const $ = s => document.querySelector(s);
 
   function h(tag, p, ...enfants) {
@@ -99,6 +99,14 @@
   function etage(cl, titre, info, postes) {
     return h('div', { class: 'etage ' + cl }, h('div', { class: 'etage-h' }, h('h2', { text: titre }), h('small', { text: info })), h('div', { class: 'postes' }, postes));
   }
+  // Vue 2.5D (EIA-018) : la même disposition, inclinée en perspective par CSS (aucune bibliothèque). Préférence gardée
+  // dans le navigateur ; si le stockage est indisponible, la vue standard reste affichée.
+  function preferenceVue25d() { try { return localStorage.getItem('siege.vue25d') === '1'; } catch (e) { return false; } }
+  function basculer25d() {
+    vue25d = !vue25d;
+    try { localStorage.setItem('siege.vue25d', vue25d ? '1' : '0'); } catch (e) { /* préférence non gardée */ }
+    rendreBureau();
+  }
   function rendreBureau() {
     const ag = E.agents, groupe = ag.filter(a => a.portee === 'groupe'), roles = E.rolesFiliale.filter(r => ag.some(a => a.nom === r));
     const d = E.activite.direction, q = E.questions.liste.length;
@@ -106,7 +114,9 @@
     const fils = E.filiales.filter(f => f.prefixe !== 'GRP');
     vider($('#v-bureau'),
       h('p', { class: 'aide', text: 'Les agents s\'allument quand Claude Code travaille dans le Siège. Cliquez un poste pour voir sa fiche.' }),
-      h('div', { class: 'immeuble' },
+      h('div', { class: 'bureau-barre' },
+        h('button', { type: 'button', class: 'btn petit', 'aria-pressed': String(vue25d), onclick: basculer25d, text: vue25d ? 'Vue standard' : 'Vue 2.5D' })),
+      h('div', { class: 'immeuble' + (vue25d ? ' vue25d' : '') },
         etage('direction', 'Direction', '', [
           poste('CEO', 'Vous — CEO', null, () => $(`.tabs [data-v=${enAttente().length ? 'droits' : 'backlog'}]`).click(),
             [q ? q + ' question(s)' : '', enAttente().length ? enAttente().length + ' exception(s)' : ''].filter(Boolean).join(' · ') || 'Rien en attente'),
@@ -142,7 +152,17 @@
       h('div', { class: 'barre' }, h('button', { type: 'button', class: 'btn', text: 'Modifier l\'agent', onclick: () => editeurAgent(a) })),
       h('h3', { text: 'Missions récentes' }),
       missions.length ? h('div', { class: 'journal' }, missions.slice(0, 20).map(m => h('div', {}, h('span', { class: 'muted', text: depuis(m.derniere) }), h('span', { class: 'mono', text: m.story || '—' }), h('span', {}, h('span', { class: 'pastille ' + ETAT[m.etat][0] }, h('i'), ETAT[m.etat][1])), h('span', { text: m.resume }))))
-        : h('p', { class: 'aide', text: 'Aucune mission sur les 7 derniers jours.' }));
+        : h('p', { class: 'aide', text: 'Aucune mission sur les 7 derniers jours.' }),
+      JournalAgent.section(a.nom, {
+        h, vider,
+        lire: async (depuis, nombre) => {
+          const r = await fetch('/api/agents/' + encodeURIComponent(a.nom) + '/journal?depuis=' + depuis + '&nombre=' + nombre, { cache: 'no-store' });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        },
+        ticketConnu: id => [...E.features.elements, ...E.bugs.elements].some(t => t.id === id),
+        ouvrirTicket: id => { coll = id.startsWith('BUG-') ? 'bugs' : 'features'; ficheTicket(E[coll].elements.find(t => t.id === id)); }
+      }));
   }
 
   // ---------- Backlog ----------
@@ -553,6 +573,13 @@
       h('p', { text: 'App « ' + r.app + ' » : ' + r.accessibles.length + ' repo(s) accessible(s).' }),
       r.manquants.length ? h('p', { class: 'attention', text: 'Repos déclarés mais non accessibles à l\'App (installez-la dessus) : ' + r.manquants.join(', ') }) : h('p', { text: 'Tous les repos déclarés sont accessibles.' })); }
 
+    // Cloner un dépôt GitHub dans projets/ (adresse de l'entreprise, dépôt public ou accessible sans identifiant)
+    const cUrl = h('input', { type: 'url', name: 'cloneUrl', placeholder: 'https://github.com/propriétaire/dépôt' }), cNom = h('input', { name: 'cloneNom', placeholder: 'entreprise-ia' });
+    const retourClone = h('div', { class: 'aide' });
+    const cloneC = h('div', { class: 'carte' }, h('h3', { text: 'Cloner un dépôt' }),
+      h('p', { class: 'aide', text: 'Clone le dépôt dans projets/<nom>. Adresse https de l\'hôte GitHub configuré, sans identifiant. Un dépôt privé n\'est pas accepté ici : il passe par l\'App GitHub.' }),
+      h('div', { class: 'grille2' }, champ('Adresse du dépôt', cUrl), champ('Nom du dossier', cNom)),
+      h('div', { class: 'barre' }, h('button', { type: 'button', class: 'btn prim', text: 'Cloner', onclick: () => act({ op: 'repo.cloner', url: cUrl.value.trim(), nom: cNom.value.trim() }, 'Dépôt cloné').then(r => { vider(retourClone, h('p', { text: 'Cloné dans ' + r.dossier + '.' })); }).catch(() => {}) })), retourClone);
     // Messagerie : Telegram et Slack (mêmes fonctions), file et plafond communs
     const M = E.messagerie, plaf = h('input', { type: 'number', min: 1, max: 1000, value: M.plafondJour, 'aria-label': 'Plafond', style: 'width:90px' });
     const pers = (p, boutons) => h('li', {}, h('b', { text: p.nom }), p.username ? ' @' + p.username : '', ' ', h('span', { class: 'muted mono', text: '#' + p.id }), ' ', boutons);
@@ -628,7 +655,7 @@
       TM.moi ? h('p', { class: 'aide', text: 'Connecté : ' + TM.moi.nom }) : null,
       personnes('teams', TM, 'Une personne apparaît ici dès qu\'elle écrit au compte Directeur dans Teams.'));
 
-    vider($('#v-reglages'), sources, copilotC, messagerieC, teamsC, telegram, slack, jiraC, notion, github,
+    vider($('#v-reglages'), sources, copilotC, messagerieC, teamsC, telegram, slack, jiraC, notion, github, cloneC,
       h('div', { class: 'carte' }, h('h3', { text: 'Siège' }), h('p', { class: 'mono muted', text: E.racine }),
         h('p', { class: 'aide', text: 'Jetons et clé privée restent sur ce poste (~/.siege, droits 600) et ne sont jamais renvoyés à la page.' })));
   }

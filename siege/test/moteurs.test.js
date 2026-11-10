@@ -1,4 +1,5 @@
 'use strict';
+require('./_humain');
 // Moteurs d'agents : détection (faux codex), activation par le CEO, refus par la garde et par l'outil, agent Codex de bout
 // en bout (bac à sable demandé, réseau coupé, passation inscrite sur le ticket).
 const test = require('node:test'), assert = require('node:assert'), fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');

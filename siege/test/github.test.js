@@ -46,7 +46,7 @@ test('jeton par rôle, push sur branche autorisée seulement, fusion seulement a
     execFileSync('git', ['-C', local, 'branch', 'feature/COL-001']);
     process.env.GITHUB_GIT_URL = d;
     gh.pousser(local, 'moi/repo', 'feature/COL-001', 'ghs_secret');
-    assert.match(execFileSync('git', ['-C', distant, 'branch']).toString(), /feature\/COL-001/);
+    assert.match(execFileSync('git', ['-c', 'safe.bareRepository=all', '-C', distant, 'branch']).toString(), /feature\/COL-001/);
     assert.doesNotMatch(fs.readFileSync(path.join(local, '.git', 'config'), 'utf8'), /ghs_secret|extraheader/);
     assert.throws(() => gh.pousser(local, 'moi/repo', 'main', 'ghs_secret'), /jamais main/);
 

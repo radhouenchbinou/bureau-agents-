@@ -4,11 +4,12 @@
 // absent = session principale = directeur.
 'use strict';
 const fs = require('fs'), path = require('path'), os = require('os');
+const identite = require('./identite'), { options, ErreurOptions } = require('./options');
 
 const OUTILS_LECTURE = ['Read', 'Grep', 'Glob', 'NotebookRead'];
 const OUTILS_ECRITURE = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 const OUTILS_WEB = ['WebFetch', 'WebSearch'];
-const ENV_INTERDITES = /^(PATH|LD_\w+|DYLD_\w+|NODE_OPTIONS|NODE_PATH|PYTHONPATH|PYTHONSTARTUP|GIT_\w+|BASH_ENV|ENV|HOME|SHELL|IFS|PS4|PROMPT_COMMAND)$/;
+const ENV_INTERDITES = /^(PATH|LD_\w+|DYLD_\w+|NODE_OPTIONS|NODE_PATH|PYTHONPATH|PYTHONSTARTUP|GIT_\w+|BASH_ENV|ENV|HOME|SHELL|IFS|PS4|PROMPT_COMMAND|CLAUDECODE|SIEGE_\w+|CLAUDE_\w+)$/;   // SIEGE_*, CLAUDE* : contexte d'identité (EIA-001), hors de portée des agents
 
 // ---------- Découpage d'une commande shell (sans l'exécuter) ----------
 // Renvoie { segments: [{ mots, tube }], refus } ; refuse substitutions, redirections et fonds de tâche.
@@ -22,7 +23,8 @@ function decouper(cmd) {
     if (q === '"') {
       if (c === '"') { q = null; continue; }
       if (c === '`' || (c === '$' && (n === '(' || n === '{'))) return { refus: 'Substitution de commande interdite' };
-      if (c === '\\' && n !== undefined) { mot += n; i++; continue; }
+      if (c === '\\' && n === '\n') { i++; continue; }
+      if (c === '\\' && (n === '$' || n === '`' || n === '"' || n === '\\')) { mot += n; i++; continue; }   // sinon l'antislash reste : même mots que l'outil lancé
       mot += c; continue;
     }
     if (c === "'" || c === '"') { q = c; if (mot === null) mot = ''; continue; }
@@ -137,6 +139,25 @@ function normaliser(outil, entree) {
   if (outil === 'Agent') entree = { ...entree, subagent_type: entree.subagent_type || entree.agent_type || entree.agent || '', prompt: entree.prompt || entree.task || entree.description || '' };
   return { outil, entree };
 }
+// Défense en profondeur sur les outils du Siège (l'outil reste l'autorité) : option répétée, --auteur (commenter) ou
+// --role (github) différent du rôle. Renvoie un refus { ok: false, raison, refusIdentite? } ou null.
+function controleOutil(politique, role, mots) {
+  const m = /^siege\/(\w+)\.js$/.exec(mots[0] === 'node' ? mots[1] || '' : ''); if (!m || !identite.OUTILS.includes(m[1])) return null;
+  let o; try { o = options(mots.slice(2)).o; } catch (e) { if (e instanceof ErreurOptions) return { ok: false, raison: e.message }; throw e; }
+  const outil = m[1], sous = mots[2] || '', valeur = outil === 'backlog' && sous === 'commenter' ? o.auteur : outil === 'github' ? o.role : undefined;
+  const raison = identite.refusDemande(politique, role, valeur);
+  return raison ? { ok: false, raison, refusIdentite: { demande: valeur, outil, sous_commande: sous } } : null;
+}
+// Segments « node siege/<outil>.js … » d'une commande déjà autorisée : mots à enregistrer dans le registre d'identité
+function outilsSiege(commande) {
+  const d = decouper(String(commande || '')), out = []; if (d.refus) return out;
+  for (const s of d.segments) {
+    if (s.tube) continue;
+    const mots = [...s.mots]; while (mots.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(mots[0])) mots.shift();
+    if (mots[0] === 'node' && /^siege\/\w+\.js$/.test(mots[1] || '') && identite.OUTILS.includes(mots[1].slice(6, -3))) out.push(mots.slice(1));
+  }
+  return out;
+}
 function decider(politique, brut, { racine, role, exceptions = [] }) {
   // Mode sans restriction décidé par le CEO (Siège › Admin) : tout passe, la garde ne fait que journaliser
   if (require('./mode-libre').actif(racine)) return { ok: true, libre: true };
@@ -197,6 +218,7 @@ function decider(politique, brut, { racine, role, exceptions = [] }) {
         cwd = abs; continue;
       }
       const texte = mots.join(' ');
+      const id = controleOutil(politique, role, mots); if (id) return id;
       if (/^node siege\/exception\.js (accorder|refuser)\b/.test(texte)) return { ok: false, raison: 'Seul le CEO accorde ou refuse une exception (Siège › Exceptions)' };
       if (R.lecture.has(mots[0]) || CMD_FICHIERS.has(mots[0])) {
         if (s.joker) return refus(`Joker non entre guillemets dans « ${texte.slice(0, 80)} » : utilisez l'outil Glob, ou mettez le motif entre guillemets pour find et grep`, 'bash', texte);
@@ -235,4 +257,4 @@ function verifierMission(liaisons, session, entree, desactivee) {
   return { ok: true, lier: session && !deja ? { ticket, etape, date: new Date().toISOString() } : null };
 }
 
-module.exports = { normaliser, verifierMission, decouper, globVersRegex, correspond, charger, regles, decider };
+module.exports = { normaliser, verifierMission, decouper, globVersRegex, correspond, charger, regles, decider, outilsSiege, cleIdentite: identite.cleIdentite };

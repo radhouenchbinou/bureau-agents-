@@ -1,4 +1,5 @@
 'use strict';
+require('./_humain');
 // Telegram de bout en bout contre une fausse API : accès, demande, validation par le demandeur, escalade au CEO,
 // ticket, notifications, garde-fous (inconnus, groupes, rythme, plafond, boutons d'un autre).
 const test = require('node:test'), assert = require('node:assert'), fs = require('fs'), os = require('os'), path = require('path'), http = require('http');
