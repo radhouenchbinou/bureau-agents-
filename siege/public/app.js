@@ -553,6 +553,13 @@
       h('p', { text: 'App « ' + r.app + ' » : ' + r.accessibles.length + ' repo(s) accessible(s).' }),
       r.manquants.length ? h('p', { class: 'attention', text: 'Repos déclarés mais non accessibles à l\'App (installez-la dessus) : ' + r.manquants.join(', ') }) : h('p', { text: 'Tous les repos déclarés sont accessibles.' })); }
 
+    // Cloner un dépôt GitHub dans projets/ (adresse de l'entreprise, dépôt public ou accessible sans identifiant)
+    const cUrl = h('input', { type: 'url', name: 'cloneUrl', placeholder: 'https://github.com/propriétaire/dépôt' }), cNom = h('input', { name: 'cloneNom', placeholder: 'entreprise-ia' });
+    const retourClone = h('div', { class: 'aide' });
+    const cloneC = h('div', { class: 'carte' }, h('h3', { text: 'Cloner un dépôt' }),
+      h('p', { class: 'aide', text: 'Clone le dépôt dans projets/<nom>. Adresse https de l\'hôte GitHub configuré, sans identifiant. Un dépôt privé n\'est pas accepté ici : il passe par l\'App GitHub.' }),
+      h('div', { class: 'grille2' }, champ('Adresse du dépôt', cUrl), champ('Nom du dossier', cNom)),
+      h('div', { class: 'barre' }, h('button', { type: 'button', class: 'btn prim', text: 'Cloner', onclick: () => act({ op: 'repo.cloner', url: cUrl.value.trim(), nom: cNom.value.trim() }, 'Dépôt cloné').then(r => { vider(retourClone, h('p', { text: 'Cloné dans ' + r.dossier + '.' })); }).catch(() => {}) })), retourClone);
     // Messagerie : Telegram et Slack (mêmes fonctions), file et plafond communs
     const M = E.messagerie, plaf = h('input', { type: 'number', min: 1, max: 1000, value: M.plafondJour, 'aria-label': 'Plafond', style: 'width:90px' });
     const pers = (p, boutons) => h('li', {}, h('b', { text: p.nom }), p.username ? ' @' + p.username : '', ' ', h('span', { class: 'muted mono', text: '#' + p.id }), ' ', boutons);
@@ -628,7 +635,7 @@
       TM.moi ? h('p', { class: 'aide', text: 'Connecté : ' + TM.moi.nom }) : null,
       personnes('teams', TM, 'Une personne apparaît ici dès qu\'elle écrit au compte Directeur dans Teams.'));
 
-    vider($('#v-reglages'), sources, copilotC, messagerieC, teamsC, telegram, slack, jiraC, notion, github,
+    vider($('#v-reglages'), sources, copilotC, messagerieC, teamsC, telegram, slack, jiraC, notion, github, cloneC,
       h('div', { class: 'carte' }, h('h3', { text: 'Siège' }), h('p', { class: 'mono muted', text: E.racine }),
         h('p', { class: 'aide', text: 'Jetons et clé privée restent sur ce poste (~/.siege, droits 600) et ne sont jamais renvoyés à la page.' })));
   }
