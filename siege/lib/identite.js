@@ -107,4 +107,15 @@ function imposer(acteur, valeur, { outil, sous_commande }) {
   return acteur.role;
 }
 
-module.exports = { resoudre, imposer, deposer, cleIdentite, contexteAgent, normaliser, humaines, rolesReserves, refusDemande, politique, ErreurIdentite, MARQUEURS, OUTILS, DUREE_MS, dossier };
+// Auteur donné par un humain en ligne de commande (EIA-001, G4 tranché : option 2) : seuls les noms réservés aux humains
+// sont acceptés ; « CEO » par défaut. Tout autre nom est refusé.
+function auteurHumain(valeur, racine) {
+  if (valeur === undefined || valeur === '') return 'CEO';
+  let p = {}; try { p = politique(racine); } catch {}      // pas de droits lisibles : seul « CEO » est réservé
+  const noms = humaines(p);
+  const m = noms.find(x => normaliser(x) === normaliser(valeur));
+  if (!m) throw new ErreurIdentite(`auteur « ${String(valeur).slice(0, 40)} » non autorisé : seuls les noms réservés aux humains sont acceptés (${noms.join(', ')})`);
+  return m;
+}
+
+module.exports = { resoudre, imposer, auteurHumain, deposer, cleIdentite, contexteAgent, normaliser, humaines, rolesReserves, refusDemande, politique, ErreurIdentite, MARQUEURS, OUTILS, DUREE_MS, dossier };

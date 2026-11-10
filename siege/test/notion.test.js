@@ -37,11 +37,10 @@ test('l\'équipe initialise Notion, importe le backlog, fait vivre tickets et co
 
     // Un agent fait avancer un ticket, commente, pose une question ; un testeur remonte un bug
     await main(['maj', 'COL-001', '--statut', 'En cours', '--etape', '4 · Développement', '--agent', 'dev-backend']);
-    await main(['commenter', 'COL-001', '--auteur', 'dev-backend', '--texte', 'Faux serveur prêt, 6 scénarios']);
-    await main(['commenter', 'COL-001', '--auteur', 'qa', '--question', '--texte', 'Faut-il simuler les 400 « NONE » ?']);
+    await main(['commenter', 'COL-001', '--auteur', 'CEO', '--texte', 'Faux serveur prêt, 6 scénarios']);   // humain : seul un nom réservé est accepté (G4 option 2)
+    // La question d'agent (CA7) est couverte par test/identite.test.js : un humain ne pose pas de question au nom d'un agent.
     await main(['creer', 'bug', '--filiale', 'Collecte', '--story', 'COL-001', '--titre', 'Retry-After ignoré', '--gravite', 'Bloquant', '--detecte-par', 'qa']);
     const { questionsOuvertes } = require('../backlog');
-    assert.strictEqual((await questionsOuvertes())[0].question.texte, 'Faut-il simuler les 400 « NONE » ?');
     // Le CEO répond à la main dans Notion : la question est close
     const page = [...srv.etat.pages.values()].find(p => p.properties.ID.rich_text[0].text.content === 'COL-001');
     srv.commenterEnHumain(page.id, 'Oui, avec le corps {"key":"NONE"}');

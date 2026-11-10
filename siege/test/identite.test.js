@@ -219,14 +219,23 @@ test('R7/R8 contexte sans entrée pour chaque outil ; humain hors contexte incha
   vider(); fs.writeFileSync(COMMENTAIRES, JSON.stringify({ 'EIA-001': [{ date: 'd', auteur: 'CEO', type: 'reponse', texte: 'ancien' }, { date: 'd', texte: 'sans type' }] }, null, 2));
   const avant = JSON.parse(fs.readFileSync(COMMENTAIRES, 'utf8'))['EIA-001'];
   await silence(() => backlog.main(['commenter', 'EIA-001', '--texte', 'x']));
-  await silence(() => backlog.main(['commenter', 'EIA-001', '--auteur', 'qa', '--texte', 'y']));
+  await refus(backlog.main(['commenter', 'EIA-001', '--auteur', 'qa', '--texte', 'y']), /non autorisé/);   // G4 option 2 : nom d'agent refusé pour un humain
   await silence(() => backlog.main(['commentaires', 'EIA-001'])); await silence(() => backlog.main(['questions'])); await silence(() => backlog.main(['file']));
   const apres = commentaires();
   assert.deepStrictEqual(apres.slice(0, 2), avant);
-  assert.deepStrictEqual(apres.slice(2).map(c => [c.auteur, c.type]), [['CEO', 'reponse'], ['qa', 'suivi']]);
+  assert.deepStrictEqual(apres.slice(2).map(c => [c.auteur, c.type]), [['CEO', 'reponse']]);
 });
 
 test('CA12 chaque critère CA1 à CA10 a un test nommé dans la suite', () => {
   const src = fs.readdirSync(__dirname).filter(f => f.endsWith('.test.js')).map(f => fs.readFileSync(path.join(__dirname, f), 'utf8')).join('\n');
   for (let i = 1; i <= 10; i++) assert.ok(new RegExp(`test\\('CA${i}[ /]`).test(src), 'CA' + i);
+});
+
+test('G4 (option 2) : un humain en ligne de commande ne signe que sous un nom réservé aux humains', () => {
+  const racine = path.resolve(__dirname, '..', '..');
+  assert.strictEqual(identite.auteurHumain(undefined, racine), 'CEO');
+  assert.strictEqual(identite.auteurHumain('', racine), 'CEO');
+  assert.strictEqual(identite.auteurHumain('ceo', racine), 'CEO');
+  assert.throws(() => identite.auteurHumain('Marie', racine), /non autorisé/);
+  assert.throws(() => identite.auteurHumain('product-owner', racine), /non autorisé/);
 });

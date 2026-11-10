@@ -121,7 +121,7 @@ async function main(argv) {
     case 'commenter': {
       const id = reste[0]; if (!id) throw new ErreurBacklog('commenter <ID> --auteur <agent> --texte "…" [--question]');
       // Agent : auteur = rôle imposé (jamais `reponse`, réservée au canal humain) ; humain : logique d'origine
-      const auteur = acteur.humain ? o.auteur || 'CEO' : identite.imposer(acteur, o.auteur, { outil: 'backlog', sous_commande: 'commenter' });
+      const auteur = acteur.humain ? identite.auteurHumain(o.auteur) : identite.imposer(acteur, o.auteur, { outil: 'backlog', sous_commande: 'commenter' });
       const type = 'question' in o ? 'question' : !acteur.humain || (o.auteur && o.auteur !== 'CEO') ? 'suivi' : 'reponse';
       const c = await cfg.source(collectionDe(id)).commenter(id, { auteur, type, texte: o.texte });
       console.log('Commentaire ajouté sur ' + id + ' : [' + c.type + '] ' + c.texte); return;
