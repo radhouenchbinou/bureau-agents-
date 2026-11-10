@@ -88,3 +88,31 @@ test('boucle : un titre à risque (fusion) est mis en attente avant même de cr�
   assert.strictEqual(lance, false, 'aucune instance lancée');
   assert.ok(!fs.existsSync(path.join(base, 'eia-001')), 'aucun worktree créé');
 });
+
+test('lot 4 : feux verts et criticité basse → PR publiée, fusionnée, ticket En revue', async () => {
+  const { r, base, src, charger } = await fixture([{ titre: 'Ajouter une aide', rang: 1 }]);
+  const fusions = [];
+  const bilan = await boucle({
+    charger, src, racine: r, base, max: 1,
+    runner: async ({ dossier }) => { fs.writeFileSync(path.join(dossier, 'aide.txt'), 'a'); return { ok: true }; },
+    publier: async () => ({ pr: 'PR#1', feux: { revue: 'success', securite: 'success' } }),
+    fusionner: async ({ pr }) => { fusions.push(pr); },
+  });
+  assert.deepStrictEqual(fusions, ['PR#1']);
+  assert.match(fs.readFileSync(bilan[0].rapport, 'utf8'), /fusionnée/);
+  assert.strictEqual((await src.lister())[0].statut, 'En revue');
+});
+
+test('lot 4 : feu rouge → pas de fusion, ticket en attente', async () => {
+  const { r, base, src, charger } = await fixture([{ titre: 'Ajouter une aide bis', rang: 1 }]);
+  let fusion = false;
+  const bilan = await boucle({
+    charger, src, racine: r, base, max: 1,
+    runner: async ({ dossier }) => { fs.writeFileSync(path.join(dossier, 'b.txt'), 'b'); return { ok: true }; },
+    publier: async () => ({ pr: 'PR#2', feux: { revue: 'failure', securite: 'success' } }),
+    fusionner: async () => { fusion = true; },
+  });
+  assert.strictEqual(fusion, false);
+  assert.strictEqual(bilan[0].attente, true);
+  assert.strictEqual((await src.lister())[0].statut, 'Bloqué');
+});
