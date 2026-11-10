@@ -7,6 +7,7 @@ const fs = require('fs'), path = require('path');
 const { file } = require('./backlog');
 const crit = require('./criticite');
 const wt = require('./worktrees');
+const fusionAuto = require('./fusion-auto');
 
 const EXCLUS = ['Bloqué', 'En revue', 'Livré', 'En cours'];
 
@@ -21,7 +22,7 @@ async function mettreEnAttente(src, ticket, motif) {
 }
 
 // Rapport du directeur : docs/rapports/<ID>-directeur.md, un par instance aboutie
-function rediger({ ticket, branche, dossier, fichiers, criticite, ok }) {
+function rediger({ ticket, branche, dossier, fichiers, criticite, ok, fusion = 'non faite (PR seulement)' }) {
   const dir = path.join(dossier, 'docs', 'rapports');   // dans le worktree de l'instance, versionné avec son travail
   fs.mkdirSync(dir, { recursive: true });
   const f = path.join(dir, `${ticket.id}-directeur.md`);
@@ -35,7 +36,7 @@ function rediger({ ticket, branche, dossier, fichiers, criticite, ok }) {
     ...fichiers.map(x => `  - ${x}`),
     `- Criticité : ${criticite.taux} % (${criticite.motif})`,
     `- Résultat de l'instance : ${ok ? 'réussi' : 'échec'}`,
-    `- Fusion : non faite (lot 1, PR seulement)`,
+    `- Fusion : ${fusion}`,
     '',
   ].join('\n');
   fs.writeFileSync(f, corps);
@@ -46,7 +47,9 @@ function rediger({ ticket, branche, dossier, fichiers, criticite, ok }) {
 //   charger()  -> { features, bugs } (relu à chaque tour)
 //   src        -> source des features (lister, modifier, commenter)
 //   runner({ ticket, dossier, branche }) -> { ok, action?, avisModele? }   (le lanceur d'agent, injecté)
-async function boucle({ charger, src, racine, base, runner, max = 1, journal = () => {} }) {
+// publier({ ticket, branche, dossier, fichiers }) -> { pr, feux: { revue, securite } }   (optionnel : sans lui, pas de PR ni de fusion)
+// fusionner({ ticket, pr })                       -> fusionne la PR                       (optionnel, lot 4)
+async function boucle({ charger, src, racine, base, runner, max = 1, journal = () => {}, publier = null, fusionner = null }) {
   const bilan = [];
   for (let i = 0; i < max; i++) {
     const { features, bugs } = await charger();
@@ -76,7 +79,21 @@ async function boucle({ charger, src, racine, base, runner, max = 1, journal = (
       bilan.push({ ticket: t.id, attente: true, taux: apres.taux }); continue;
     }
 
-    const rapport = rediger({ ticket: t, branche, dossier, fichiers, criticite: apres, ok: !!res.ok });
+    let fusion = 'non faite (PR seulement)';
+    if (publier) {
+      let pub;
+      try { pub = await publier({ ticket: t, branche, dossier, fichiers }); }
+      catch (e) { await mettreEnAttente(src, t, 'Publication impossible : ' + String(e.message).slice(0, 160)); bilan.push({ ticket: t.id, attente: true, erreur: 'publication' }); continue; }
+      const dec = await fusionAuto.fusionnerSiPret({ criticite: apres, feux: pub.feux, fusionner: () => fusionner({ ticket: t, pr: pub.pr }) });
+      if (!dec.fusionne) {
+        await mettreEnAttente(src, t, `PR ${pub.pr} ouverte, non fusionnée : ${dec.motif}.`);
+        bilan.push({ ticket: t.id, attente: true, pr: pub.pr, motif: dec.motif }); continue;
+      }
+      fusion = `fusionnée (${dec.motif}) — PR ${pub.pr}`;
+      await src.modifier(t.id, { statut: 'En revue' });
+      await src.commenter(t.id, { auteur: 'directeur', texte: `Mode autonome : PR ${pub.pr} fusionnée (${dec.motif}).` });
+    }
+    const rapport = rediger({ ticket: t, branche, dossier, fichiers, criticite: apres, ok: !!res.ok, fusion });
     bilan.push({ ticket: t.id, branche, ok: !!res.ok, rapport });
     journal({ ticket: t.id, branche, ok: !!res.ok, rapport });
   }
