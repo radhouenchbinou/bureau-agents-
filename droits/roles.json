@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "_lisez_moi": "Source unique des droits de chaque agent. Tout ce qui n'est pas listé est refusé. Après modification : node siege/droits.js appliquer (met à jour outils et skills des agents). Les commandes shell sont des expressions régulières sur la commande normalisée (mots séparés par un espace, guillemets retirés). {role} est remplacé par le nom de l'agent.",
+  "version": 2,
+  "_lisez_moi": "Source unique des droits de chaque agent. Tout ce qui n'est pas listé est refusé. Après modification : node siege/droits.js appliquer (met à jour outils et skills des agents). Les commandes shell sont des expressions régulières sur la commande normalisée (mots séparés par un espace, guillemets retirés). {role} est remplacé par le nom de l'agent. Règles d'écriture : chaque motif est ancré (^ en début, ( |$) ou $ en fin) ; aucun nom de commande n'est joker ; pas de code en ligne (-c, -e), pas de substitution, de redirection ni de « .. » (refusés par siege/lib/garde.js avant ces motifs) ; les options destructrices ou réseau sont exclues par lookahead.",
   "commun": {
     "identites_humaines": [
       "CEO"
@@ -118,12 +118,12 @@
       ],
       "ecriture": [],
       "bash": [
-        "^node siege/backlog\\.js (maj|creer|commenter)\\b",
-        "^node siege/exception\\.js (demander|activer|terminer)\\b",
-        "^node siege/github\\.js etat\\b",
-        "^node siege/demande\\.js (liste|voir|repondre|valider|escalader|ticket|refuser|clore|notifier)\\b",
-        "^node siege/filiale\\.js (liste|ajouter)\\b",
-        "^node siege/agent\\.js (moteurs|lancer)\\b"
+        "^node siege/backlog\\.js (maj|creer|commenter)( |$)",
+        "^node siege/exception\\.js (demander|activer|terminer)( |$)",
+        "^node siege/github\\.js etat( |$)",
+        "^node siege/demande\\.js (liste|voir|repondre|valider|escalader|ticket|refuser|clore|notifier)( |$)",
+        "^node siege/filiale\\.js (liste|ajouter)( |$)",
+        "^node siege/agent\\.js (moteurs|lancer)( |$)"
       ],
       "web": [],
       "github": {},
@@ -140,9 +140,9 @@
         "projets/**/docs/backlog/**"
       ],
       "bash": [
-        "^node siege/backlog\\.js maj [A-Z]{3}-\\d{3}\\b",
-        "^node siege/backlog\\.js creer feature\\b",
-        "^cd projets/\\S+$"
+        "^node siege/backlog\\.js maj [A-Z]{3}-\\d{3}( |$)",
+        "^node siege/backlog\\.js creer feature( |$)",
+        "^cd projets/[\\w./-]+$"
       ],
       "web": [],
       "github": {},
@@ -163,7 +163,7 @@
         "portfolio/decisions/**"
       ],
       "bash": [
-        "^cd projets/\\S+$"
+        "^cd projets/[\\w./-]+$"
       ],
       "web": [],
       "github": {
@@ -259,19 +259,17 @@
         "projets/**/docs/backlog/**"
       ],
       "bash": [
-        "^python3? -m (unittest|pytest)\\b",
-        "^python3? projets/\\S+\\.py\\b",
-        "^(mvn|\\./mvnw|gradle|\\./gradlew) (-q )?(test|verify)\\b",
-        "^npm (test|run test)\\b",
-        "^node --test\\b",
-        "^cd projets/\\S+$",
-        "^node siege/backlog\\.js creer bug\\b",
-        "^node siege/backlog\\.js maj BUG-\\d{3}\\b",
-        "^(npm|npx|pnpm|yarn|node)( |$)",
-        "^(mvn|\\./mvnw|gradle|\\./gradlew)( |$)",
-        "^(python3?|pip3?|pytest)( |$)",
-        "^(go|cargo|make|dotnet) (test|vet|build)( |$)",
-        "^npx playwright( |$)"
+        "^cd projets/[\\w./-]+$",
+        "^python3? -m (unittest|pytest)( |$)",
+        "^pytest( |$)",
+        "^python3? projets/[\\w./-]+\\.py( |$)",
+        "^(\\./mvnw|mvn) (-q )?(test|verify)( |$)",
+        "^(\\./gradlew|gradle) (-q )?test( |$)",
+        "^npm (test|run test)( |$)",
+        "^npx (jest|vitest|playwright test)( |$)",
+        "^node --test( |$)",
+        "^node siege/backlog\\.js creer bug( |$)",
+        "^node siege/backlog\\.js maj BUG-\\d{3}( |$)"
       ],
       "web": [],
       "github": {
@@ -354,17 +352,20 @@
         "projets/**/*.env.example"
       ],
       "bash": [
-        "^git( -C \\S+)? (add|commit|checkout|switch)( |$)",
-        "^docker (build|compose config)\\b",
-        "^systemd-analyze verify\\b",
+        "^(?!.*(--no-verify| -f\\b| --force\\b))git( -C projets/[\\w./-]+)? (add|commit|checkout|switch|mv)( |$)",
+        "^(?!.*(--privileged|--network[= ]host|--pid[= ]host|--ipc[= ]host|--cap-add|--security-opt|--mount|--volume| -v |--push))docker (build|compose (config|build)|images|image inspect|run --rm)( |$)",
+        "^(hadolint|shellcheck|actionlint|yamllint)( |$)",
+        "^systemd-analyze verify( |$)",
+        "^make (build|test|lint|check|package)( |$)",
+        "^npm (ci|install)( --ignore-scripts)?$",
+        "^npm (test|run (test|build|lint|typecheck))( |$)",
+        "^npx (tsc|eslint|vitest|jest)( |$)",
+        "^(\\./mvnw|mvn) (-q )?(verify|package|test|compile)( |$)",
+        "^(\\./gradlew|gradle) (-q )?(check|build|test)( |$)",
+        "^python3? -m (pytest|unittest|py_compile|compileall)( |$)",
+        "^python3? -m pip install -r [\\w./-]+\\.txt --require-hashes( |$)",
         "^node siege/github\\.js (pousser|pr|fusionner) .*--role {role}( |$)",
-        "^(npm|npx|pnpm|yarn|node)( |$)",
-        "^(mvn|\\./mvnw|gradle|\\./gradlew)( |$)",
-        "^(python3?|pip3?)( |$)",
-        "^make( |$)",
-        "^docker (build|compose (config|build)|image (ls|inspect)|run --rm)( |$)",
-        "^(shellcheck|hadolint|actionlint|yamllint)( |$)",
-        "^cd projets/\\S+$"
+        "^cd projets/[\\w./-]+$"
       ],
       "web": [],
       "github": {
@@ -390,7 +391,8 @@
         "projets/**/docs/site/**"
       ],
       "bash": [
-        "^cd projets/\\S+$"
+        "^cd projets/[\\w./-]+$",
+        "^npx (htmlhint|markdownlint)( |$)"
       ],
       "web": [],
       "github": {

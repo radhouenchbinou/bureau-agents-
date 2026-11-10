@@ -157,6 +157,10 @@ label.champ.coche{display:flex;align-items:center;gap:8px;grid-column:1/-1}
 .redaction textarea,.carte > textarea{width:100%;box-sizing:border-box;min-height:64px}
 .erreur-red{color:var(--risk);font-size:13px}
 .redaction textarea[name="description"],.redaction textarea[name="reproduction"]{min-height:240px;font:12.5px/1.5 var(--mono)}
+.etapes{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0}
+.etapes legend{font-weight:600;padding:0 4px}
+.etape-case{display:flex;gap:8px;align-items:center;font-size:13.5px}
+.avert{color:var(--wait);min-height:0}
 .bandeau.libre{border-color:var(--risk);background:color-mix(in srgb,var(--risk) 14%,transparent);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 
 /* EIA-018 : vue 2.5D du Bureau (CSS seul, sans bibliothèque 3D). Désactivée si l'utilisateur préfère moins de mouvement. */

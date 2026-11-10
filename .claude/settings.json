@@ -8,10 +8,7 @@
       "Read(~/.siege/**)",
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
-      "Read(~/.config/gh/**)",
-      "Edit(/droits/**)",
-      "Edit(/.claude/**)",
-      "Edit(/siege/**)"
+      "Read(~/.config/gh/**)"
     ],
     "allow": [
       "Bash(node siege/backlog.js:*)"
@@ -39,6 +36,16 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/siege/garde.js\""
+          }
+        ]
+      }
     ]
   },
   "sandbox": {
@@ -59,7 +66,18 @@
         "api.github.com",
         "codeload.github.com",
         "*.githubusercontent.com",
-        "api.notion.com"
+        "api.notion.com",
+        "slack.com",
+        "api.slack.com",
+        "hooks.slack.com",
+        "registry.npmjs.org",
+        "repo.maven.apache.org",
+        "repo1.maven.org",
+        "central.sonatype.com",
+        "plugins.gradle.org",
+        "services.gradle.org",
+        "pypi.org",
+        "files.pythonhosted.org"
       ]
     },
     "filesystem": {

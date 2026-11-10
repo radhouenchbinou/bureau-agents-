@@ -3,7 +3,7 @@
 // que le backlog soit dans des fichiers locaux ou dans Notion. Même code que l'interface du Siège.
 'use strict';
 const cfg = require('./lib/config');
-const { COLLECTIONS, ErreurBacklog, file, prochainId, prete, questionOuverte } = require('./lib/backlog');
+const { COLLECTIONS, ErreurBacklog, file, prochainId, prete, questionOuverte, etapesDesactivees, etapeSuivante, numeroEtape } = require('./lib/backlog');
 
 // Tickets actifs (pas encore livrés ou fermés) dont la dernière question d'agent attend le CEO
 const ACTIFS = ['Spécifiée', 'En cours', 'En revue', 'Bloqué', 'Ouvert', 'En correction', 'À vérifier'];
@@ -43,6 +43,8 @@ Intégration (CEO) :
 
 Commentaires (sur la page Notion du ticket, ou en local)
   commenter <ID> --auteur <agent> --texte "…" [--question]   suivi d'avancement, ou question au CEO
+  etapes <ID>                           étapes du circuit désactivées par le CEO pour ce ticket (JSON)
+  suivante <ID> [--apres n]             prochaine étape active après l'étape n (par défaut : l'étape inscrite)
   commentaires <ID>                     le fil du ticket
   questions                             questions des agents encore sans réponse du CEO
 
@@ -101,6 +103,21 @@ async function main(argv) {
         if (enfants.length) e.lot = enfants.map(x => ({ id: x.id, filiale: x.filiale, statut: x.statut, etape: x.etape || '', pr: x.pr || '' }));
       }
       console.log(JSON.stringify(e, null, 2)); return;
+    }
+    // Étapes du circuit désactivées par le CEO pour un ticket, et étape active suivante
+    case 'etapes': {
+      const id = reste[0], e = (await cfg.source('features').lister()).find(x => x.id === id);
+      if (!e) throw new ErreurBacklog('Ticket introuvable : ' + id);
+      console.log(JSON.stringify({ id, etapes_desactivees: etapesDesactivees(e) })); return;
+    }
+    case 'suivante': {
+      const id = reste[0], e = (await cfg.source('features').lister()).find(x => x.id === id);
+      if (!e) throw new ErreurBacklog('Ticket introuvable : ' + id);
+      const apres = o.apres !== undefined && o.apres !== '' ? Number(o.apres) : numeroEtape(e.etape);
+      if (apres === null || Number.isNaN(apres)) throw new ErreurBacklog(id + ' n\'a pas d\'étape en cours : indique --apres <n>');
+      const s = etapeSuivante(e, apres);
+      console.log(s ? JSON.stringify({ id, etape: `${s.n} · ${s.nom.replace(/^\d · /, '')}`, desactivees: etapesDesactivees(e) }) : JSON.stringify({ id, etape: null, message: 'Plus aucune étape active : ticket à clore' }));
+      return;
     }
     case 'creer': {
       const n = reste[0] === 'bug' ? 'bugs' : reste[0] === 'feature' ? 'features' : null;

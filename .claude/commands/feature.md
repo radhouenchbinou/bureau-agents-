@@ -32,8 +32,10 @@ fichiers, rien ne doit venir d'une session précédente.
    - contrôle le livrable (complet ? conforme à la spec ?) sans le relire en entier, et vérifie la passation sur le ticket ;
    - présente au CEO : 5 lignes max + chemin du fichier + **Valider / Corriger (précisez) / Arrêter** ;
    - « Corriger » → un **nouvel** agent du même rôle, même étape, avec le chemin du livrable et la remarque ;
-   - « Valider » → `maj <ID>` à l'étape suivante, `commenter <ID> --auteur directeur --texte "Validé par le CEO · Étape
-     suivante : <n> · <nom>"`, puis **termine ton tour** : « Étape validée. Pour continuer à contexte propre :
+   - « Valider » → l'étape suivante est **la prochaine étape active** : `node siege/backlog.js suivante <ID> --apres <n>`
+     (le CEO peut avoir désactivé des étapes pour ce ticket : elles sont sautées). `maj <ID>` à cette étape,
+     `commenter <ID> --auteur directeur --texte "Validé par le CEO · Étape suivante : <n> · <nom>"`, puis **termine ton tour**
+     (si `suivante` ne renvoie aucune étape, plus rien ne reste à faire : fais le bilan de la dernière étape et clos le ticket) : « Étape validée. Pour continuer à contexte propre :
      `/clear` puis `/feature <ID>` (ou « Lancer » dans le Siège). »
 5. Questions : si un agent a posé une question (`questions`), passe le ticket « Bloqué », relaie-la au CEO,
    écris sa réponse en commentaire (`commenter <ID> --auteur CEO --texte "…"`), puis relance l'étape avec un nouvel agent.

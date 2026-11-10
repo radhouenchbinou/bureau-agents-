@@ -19,10 +19,16 @@ function modeleAutorise(h) {
   const r = moteurs.autorise('claude', m);
   return r.ok ? null : { ok: false, raison: r.raison + ' : choisis un autre modèle (paramètre model) ou demande au CEO de le réactiver' };
 }
+// Étape désactivée par le CEO pour ce ticket : lue par la CLI du backlog (Notion ou fichiers). Illisible = désactivée (refus).
+function etapeDesactiveeCEO(ticket, etape) {
+  const r = require('child_process').spawnSync('node', [path.join(RACINE, 'siege', 'backlog.js'), 'etapes', ticket], { encoding: 'utf8', timeout: 20e3, cwd: RACINE });
+  if (r.status !== 0) return true;
+  try { return JSON.parse(r.stdout).etapes_desactivees.includes(etape); } catch { return true; }
+}
 function mission(garde, h) {
   const d = process.env.SIEGE_PRIVE || path.join(os.homedir(), '.siege'), f = path.join(d, 'sessions-etapes.json');
   let l = {}; try { l = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
-  const r = garde.verifierMission(l, h.session_id, h.tool_input || {});
+  const r = garde.verifierMission(l, h.session_id, h.tool_input || {}, etapeDesactiveeCEO);
   if (r.ok && r.lier) {
     const limite = Date.now() - 7 * 864e5;
     for (const [k, v] of Object.entries(l)) if (Date.parse(v.date) < limite) delete l[k];

@@ -226,8 +226,9 @@ function decider(politique, brut, { racine, role, exceptions = [] }) {
         if (e) return refus(e, 'bash', texte);
         continue;
       }
-      // Code en ligne d'un interpréteur : refusé (le code exécuté doit être un fichier relu et versionné)
-      if (/^(python3?|node|ruby|perl|php|bash|sh|zsh|deno|bun)$/.test(mots[0]) && mots.slice(1).some(m => /^(-c|-e|-p|--eval|--print|-r|--require|--import)$/.test(m)))
+      // Code en ligne d'un interpréteur : refusé (le code exécuté doit être un fichier relu et versionné).
+      // « python -m module » lance un module installé ou versionné (pip, pytest…), ses options ne sont pas du code en ligne.
+      if (/^(python3?|node|ruby|perl|php|bash|sh|zsh|deno|bun)$/.test(mots[0]) && mots[1] !== '-m' && mots.slice(1).some(m => /^(-c|-e|-p|--eval|--print|-r|--require|--import)$/.test(m)))
         return refus(`Code en ligne interdit (${mots[0]} ${mots.find(m => /^-/.test(m))}) : écrivez un fichier`, 'bash', texte);
       // Les outils du Siège (siege/*.js) ne passent que par les règles qui les nomment, jamais par « node … » générique
       const touche = mots.slice(1).some(m => !m.startsWith('-') && path.relative(path.join(racine, 'siege'), absolu(racine, m, cwd)).split(path.sep)[0] !== '..' && !path.isAbsolute(path.relative(path.join(racine, 'siege'), absolu(racine, m, cwd))));
@@ -243,12 +244,14 @@ function decider(politique, brut, { racine, role, exceptions = [] }) {
 // liaisons = { <session_id>: { ticket, etape, date } }. La mission d'un agent porte « Ticket : <ID> » et « Étape : <n> ».
 // Renvoie { ok, raison?, lier? } ; lier = la liaison à enregistrer pour cette session.
 const RE_TICKET = /^\s*Ticket\s*:\s*([A-Z]{3}-\d{3})\b/mi, RE_ETAPE = /^\s*[ÉE]tape\s*:\s*(\d+)\b/mi;
-function verifierMission(liaisons, session, entree) {
+// desactivee(ticket, etape) → true si le CEO a désactivé cette étape pour ce ticket (fourni par siege/garde.js)
+function verifierMission(liaisons, session, entree, desactivee) {
   const texte = String(entree.prompt || ''), t = texte.match(RE_TICKET);
   if (!t) return { ok: true };                    // mission hors ticket (standup, audit) : pas de liaison
   const e = texte.match(RE_ETAPE);
   if (!e) return { ok: false, raison: 'Mission sans « Étape : <n> » : ajoute le numéro d\'étape du circuit en tête de mission' };
   const ticket = t[1].toUpperCase(), etape = Number(e[1]), deja = session && liaisons[session];
+  if (desactivee && desactivee(ticket, etape)) return { ok: false, raison: `L'étape ${etape} est désactivée pour ${ticket} (décision du CEO dans le Siège) : passe à l'étape suivante active` };
   if (deja && (deja.ticket !== ticket || deja.etape !== etape))
     return { ok: false, raison: `Contexte propre : cette session a servi à ${deja.ticket} étape ${deja.etape}. Enregistre la passation et le passage à l'étape suivante dans le ticket, puis termine ton tour ; l'étape ${etape} de ${ticket} se fait dans une nouvelle session (/clear puis /feature ${ticket}, ou « Lancer » dans le Siège)` };
   return { ok: true, lier: session && !deja ? { ticket, etape, date: new Date().toISOString() } : null };

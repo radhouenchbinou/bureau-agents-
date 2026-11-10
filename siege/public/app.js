@@ -180,7 +180,8 @@
       h('span', { class: 'haut' }, h('span', { class: 'id', text: e.id }), h('span', { class: 'rang', text: e.rang ? '#' + e.rang : '' }),
         e.gravite ? h('span', { class: 'tag ' + e.gravite.toLowerCase(), text: e.gravite }) : null,
         e.filiale ? h('span', { class: 'tag', text: e.filiale }) : null, att ? h('span', { class: 'tag attente', text: 'attend ' + e.dependances.join(', ') }) : null,
-        qu ? h('span', { class: 'tag question', text: 'question' }) : null),
+        qu ? h('span', { class: 'tag question', text: 'question' }) : null,
+        e.etapes_desactivees && e.etapes_desactivees.length ? h('span', { class: 'tag', title: 'Étapes désactivées par le CEO', text: 'sans étape ' + e.etapes_desactivees.join(', ') }) : null),
       h('span', { class: 't', text: e.titre }),
       e.etape ? h('span', { class: 'muted', text: e.etape + (e.agent ? ' · ' + e.agent : '') }) : null);
     c.addEventListener('dragstart', ev => { glisse = e.id; c.classList.add('glisse'); ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', e.id); });
@@ -282,18 +283,37 @@
     else inp = h('input', { name: k, value: v || '' });
     return h('label', { class: 'champ' + (d.max > 300 || d.type === 'titre' ? ' large' : '') }, lib, inp);
   }
+  // Étapes du circuit à désactiver pour un ticket (ex. pas de plan de tests ni de recette pour un petit changement).
+  // Étape 0 (cadrage) toujours active. L'état est tenu dans `desact` (numéros d'étapes désactivées).
+  function etapesCircuit(desact) {
+    const noms = schema().champs.etape.options || [], avertir = h('p', { class: 'aide avert', role: 'status' });
+    const bilan = () => {
+      const sans = [...desact].sort((a, b) => a - b);
+      const cles = sans.filter(n => n === 6 || n === 7).map(n => noms[n]);
+      avertir.textContent = cles.length ? 'Attention : ' + cles.join(' et ') + ' désactivée' + (cles.length > 1 ? 's' : '') + ' : la revue ou la sécurité ne sera pas faite.' : '';
+    };
+    const cases = noms.map((nom, n) => h('label', { class: 'etape-case' }, h('input', { type: 'checkbox', checked: !desact.has(n), disabled: n === 0,
+      onchange: ev => { if (ev.target.checked) desact.delete(n); else desact.add(n); bilan(); } }), h('span', { text: nom })));
+    bilan();
+    return h('fieldset', { class: 'carte etapes' }, h('legend', { text: 'Étapes du circuit' }),
+      h('p', { class: 'aide', text: 'Décochez une étape pour la sauter sur ce ticket. Le cadrage reste obligatoire.' }), h('div', { class: 'grille2' }, cases), avertir);
+  }
   function ficheTicket(e) {
     const s = schema(), nouveau = !e, val = e || {};
+    const desact = new Set(((val.etapes_desactivees) || []).map(Number));
+    const circuit = coll === 'features' ? etapesCircuit(desact) : null;
     const form = h('form', { class: 'carte', onsubmit: async ev => {
       ev.preventDefault();
       const champs = {}; for (const [k, d] of Object.entries(s.champs)) { const el = form.elements[k]; if (!el || d.auto) continue; champs[k] = d.type === 'nombre' ? (el.value === '' ? null : Number(el.value)) : el.value; }
+      if (circuit) champs.etapes_desactivees = [...desact].sort((a, b) => a - b).map(String);
       try {
         if (nouveau) { const r = await act({ op: 'ticket.creer', collection: coll, ticket: champs }, 'Ticket créé'); fermer(); ficheTicket(E[coll].elements.find(x => x.id === r.id)); }
         else { await act({ op: 'ticket.modifier', collection: coll, id: e.id, champs }, 'Enregistré'); }
       } catch {}
     } },
       Object.entries(s.champs).filter(([k, d]) => d.type === 'titre').map(([k, d]) => champ(k, d, val[k])),
-      h('div', { class: 'grille2' }, Object.entries(s.champs).filter(([, d]) => d.type !== 'titre' && !(d.max > 300)).map(([k, d]) => champ(k, d, val[k]))),
+      h('div', { class: 'grille2' }, Object.entries(s.champs).filter(([k, d]) => d.type !== 'titre' && !(d.max > 300) && k !== 'etapes_desactivees').map(([k, d]) => champ(k, d, val[k]))),
+      circuit,
       Object.entries(s.champs).filter(([, d]) => d.max > 300).map(([k, d]) => champ(k, d, val[k])),
       h('div', { class: 'barre' }, h('button', { type: 'submit', class: 'btn prim', text: nouveau ? 'Créer' : 'Enregistrer' }),
         !nouveau ? h('button', { type: 'button', class: 'btn', text: 'Lancer dans Claude Code', onclick: () => lancer(e.id) }) : null,
