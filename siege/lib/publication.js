@@ -15,7 +15,7 @@ function publier({ jeton, repo, depart = 'main', pousserFn = gh.pousser, appelFn
     });
     const st = await appelFn('GET', `/repos/${repo}/commits/${pr.head.sha}/status`, jeton);
     const etat = ctx => ((st.statuses || []).find(s => s.context === ctx) || {}).state || '';
-    return { pr: `#${pr.number}`, numero: pr.number, feux: { revue: etat('agents/revue'), securite: etat('agents/securite') } };
+    return { pr: `#${pr.number}`, numero: pr.number, sha: pr.head.sha, feux: { revue: etat('agents/revue'), securite: etat('agents/securite') } };
   };
 }
 
@@ -29,4 +29,13 @@ function fusionner({ jeton, repo, fusionnableFn = gh.fusionnable, appelFn = gh.a
   };
 }
 
-module.exports = { publier, fusionner };
+// Pose les deux feux sur le commit relu (lot 8)
+function poserFeux({ jeton, repo, appelFn = gh.appel }) {
+  return async ({ sha, revue, securite }) => {
+    for (const [contexte, etat] of [['agents/revue', revue], ['agents/securite', securite]]) {
+      await appelFn('POST', `/repos/${repo}/statuses/${sha}`, jeton, { state: etat, context: contexte, description: 'mode autonome' });
+    }
+  };
+}
+
+module.exports = { publier, fusionner, poserFeux };
