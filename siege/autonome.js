@@ -4,7 +4,7 @@
 //   node siege/autonome.js --portfolio <dossier portfolio> --lancer   → exécute (max N tickets, défaut 1)
 // Sans --lancer, aucune instance n'est créée et le backlog n'est pas modifié. Aucune fusion dans ce lot.
 'use strict';
-const path = require('path'), os = require('os');
+const path = require('path');
 const { SourceFichier } = require('./lib/backlog');
 const { boucle, choisir } = require('./lib/autonome');
 const { lancerClaude } = require('./lib/lanceur');
@@ -13,13 +13,13 @@ const crit = require('./lib/criticite');
 const RACINE = path.resolve(__dirname, '..');
 
 function options(argv) {
-  const o = { lancer: false, max: 1, portfolio: '', instances: path.join(os.homedir(), '.siege', 'instances') };
+  const o = { lancer: false, max: 1, portfolio: '', instances: path.join(RACINE, '.claude', 'worktrees') };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--lancer') o.lancer = true;
     else if (a === '--max') o.max = Math.max(1, parseInt(argv[++i], 10) || 1);
     else if (a === '--portfolio') o.portfolio = argv[++i] || '';
-    else if (a === '--instances') o.instances = argv[++i] || o.instances;
+    else if (a === '--instances') o.instances = path.resolve(argv[++i] || o.instances);
     else throw new Error('option inconnue : ' + a);
   }
   if (!o.portfolio) throw new Error('--portfolio <dossier> obligatoire');

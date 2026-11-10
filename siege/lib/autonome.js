@@ -21,8 +21,8 @@ async function mettreEnAttente(src, ticket, motif) {
 }
 
 // Rapport du directeur : docs/rapports/<ID>-directeur.md, un par instance aboutie
-function rediger({ racine, ticket, branche, dossier, fichiers, criticite, ok }) {
-  const dir = path.join(racine, 'docs', 'rapports');
+function rediger({ ticket, branche, dossier, fichiers, criticite, ok }) {
+  const dir = path.join(dossier, 'docs', 'rapports');   // dans le worktree de l'instance, versionné avec son travail
   fs.mkdirSync(dir, { recursive: true });
   const f = path.join(dir, `${ticket.id}-directeur.md`);
   const corps = [
@@ -76,7 +76,7 @@ async function boucle({ charger, src, racine, base, runner, max = 1, journal = (
       bilan.push({ ticket: t.id, attente: true, taux: apres.taux }); continue;
     }
 
-    const rapport = rediger({ racine, ticket: t, branche, dossier, fichiers, criticite: apres, ok: !!res.ok });
+    const rapport = rediger({ ticket: t, branche, dossier, fichiers, criticite: apres, ok: !!res.ok });
     bilan.push({ ticket: t.id, branche, ok: !!res.ok, rapport });
     journal({ ticket: t.id, branche, ok: !!res.ok, rapport });
   }
