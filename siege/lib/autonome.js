@@ -51,16 +51,22 @@ function rediger({ ticket, branche, dossier, fichiers, criticite, ok, fusion = '
 // publier({ ticket, branche, dossier, fichiers }) -> { pr, feux: { revue, securite } }   (optionnel : sans lui, pas de PR ni de fusion)
 // fusionner({ ticket, pr })                       -> fusionne la PR                       (optionnel, lot 4)
 // Livraison d'une instance : publier la PR, lire les feux, fusionner si la décision est positive
-function livraison(publier, fusionner) {
+// revoir({ ticket, dossier }) -> { revue, securite } : relecture par des instances (lot 8) ; poser({ sha, revue, securite }) : les feux
+function livraison(publier, fusionner, { revoir = null, poser = null } = {}) {
   return async ({ ticket, branche, dossier, fichiers, criticite }) => {
     const pub = await publier({ ticket, branche, dossier, fichiers });
-    const dec = await fusionAuto.fusionnerSiPret({ criticite, feux: pub.feux, fusionner: () => fusionner({ ticket, pr: pub.pr }) });
+    let feux = pub.feux;
+    if (revoir && (!feux.revue || !feux.securite)) {
+      feux = await revoir({ ticket, dossier });
+      if (poser) await poser({ sha: pub.sha, revue: feux.revue, securite: feux.securite });
+    }
+    const dec = await fusionAuto.fusionnerSiPret({ criticite, feux, fusionner: () => fusionner({ ticket, pr: pub.pr }) });
     return { pr: pub.pr, fusionne: dec.fusionne, motif: dec.motif };
   };
 }
 
-async function boucle({ charger, src, racine, base, runner, max = 1, journal = () => {}, publier = null, fusionner = null, livrer = null, ticket = null }) {
-  const livrerFn = livrer || (publier ? livraison(publier, fusionner) : null);
+async function boucle({ charger, src, racine, base, runner, max = 1, journal = () => {}, publier = null, fusionner = null, livrer = null, ticket = null, revoir = null, poser = null }) {
+  const livrerFn = livrer || (publier ? livraison(publier, fusionner, { revoir, poser }) : null);
   const bilan = [];
   for (let i = 0; i < max; i++) {
     let t = ticket;
@@ -115,9 +121,9 @@ async function boucle({ charger, src, racine, base, runner, max = 1, journal = (
 // Parallélisme (lot 5) : des instances tournent en même temps, dans leurs worktrees ; le nombre suit la capacité de la
 // machine (recalculée avant chaque lancement). Les livraisons (PR et fusion) passent une à une, par un verrou.
 // Un ticket en vol n'est jamais repris par une autre instance.
-async function boucleParallele({ charger, src, racine, base, runner, publier = null, fusionner = null, max = 1, capacite = () => par.capacite(), intervalleMs = 30000, journal = () => {} }) {
+async function boucleParallele({ charger, src, racine, base, runner, publier = null, fusionner = null, max = 1, capacite = () => par.capacite(), intervalleMs = 30000, journal = () => {}, revoir = null, poser = null }) {
   const bilan = [], enVol = new Map(), serie = par.verrou();
-  const livrer = publier ? (a => serie(() => livraison(publier, fusionner)(a))) : null;
+  const livrer = publier ? (a => serie(() => livraison(publier, fusionner, { revoir, poser })(a))) : null;
   let lances = 0, plusDeTicket = false;
   for (;;) {
     while (enVol.size < capacite() && lances < max && !plusDeTicket) {

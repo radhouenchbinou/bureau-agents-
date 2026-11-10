@@ -116,3 +116,17 @@ test('lot 4 : feu rouge → pas de fusion, ticket en attente', async () => {
   assert.strictEqual(bilan[0].attente, true);
   assert.strictEqual((await src.lister())[0].statut, 'Bloqué');
 });
+
+test('lot 8 : feux absents → relecture, feux posés sur le commit, fusion si verts', async () => {
+  const { livraison } = require('../lib/autonome');
+  const posés = [], fusions = [];
+  const publier = async () => ({ pr: '#9', sha: 'deadbeef', feux: { revue: '', securite: '' } });
+  const revoir = async () => ({ revue: 'success', securite: 'success' });
+  const poser = async (x) => { posés.push(x); };
+  const fusionner = async ({ pr }) => { fusions.push(pr); };
+  const l = livraison(publier, fusionner, { revoir, poser });
+  const r = await l({ ticket: { id: 'EIA-001' }, branche: 'feature/eia-001', dossier: '/x', fichiers: ['a.js'], criticite: { taux: 20, fixe: false, motif: 'b' } });
+  assert.deepStrictEqual(posés, [{ sha: 'deadbeef', revue: 'success', securite: 'success' }]);
+  assert.deepStrictEqual(fusions, ['#9']);
+  assert.strictEqual(r.fusionne, true);
+});
