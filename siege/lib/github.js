@@ -79,7 +79,8 @@ function pousser(dossierRepo, repo, branche, jeton) {
 }
 
 // Fusion par le devops : uniquement si le CEO (un humain) a approuvé la PR et si revue + sécurité sont au vert
-async function fusionnable(jeton, repo, pr) {
+// approbation : false seulement pour le mode autonome (décision du CEO, lot 6) ; le CLI garde la règle d'origine
+async function fusionnable(jeton, repo, pr, { approbation = true } = {}) {
   const p = await appel('GET', `/repos/${repo}/pulls/${pr}`, jeton);
   if (p.state !== 'open') refus(`PR #${pr} n'est pas ouverte`);
   const avis = await appel('GET', `/repos/${repo}/pulls/${pr}/reviews?per_page=100`, jeton);
@@ -88,7 +89,7 @@ async function fusionnable(jeton, repo, pr) {
   const st = await appel('GET', `/repos/${repo}/commits/${p.head.sha}/status`, jeton);
   const etat = ctx => (st.statuses || []).find(s => s.context === ctx);
   const manque = [];
-  if (!approuve) manque.push('approbation du CEO sur la PR');
+  if (approbation && !approuve) manque.push('approbation du CEO sur la PR');
   for (const ctx of ['agents/revue', 'agents/securite']) if (!etat(ctx) || etat(ctx).state !== 'success') manque.push(ctx + ' au vert');
   if (p.mergeable === false) manque.push('pas de conflit');
   return { p, manque };

@@ -19,4 +19,14 @@ function publier({ jeton, repo, depart = 'main', pousserFn = gh.pousser, appelFn
   };
 }
 
-module.exports = { publier };
+// Fusion d'une PR autonome : feux revue et sécurité verts, pas de conflit, sans approbation du CEO (décision du 2026-11-10)
+function fusionner({ jeton, repo, fusionnableFn = gh.fusionnable, appelFn = gh.appel }) {
+  return async ({ pr }) => {
+    const numero = Number(String(pr).replace('#', ''));
+    const f = await fusionnableFn(jeton, repo, numero, { approbation: false });
+    if (f.manque.length) throw new Error('fusion refusée : ' + f.manque.join(', '));
+    await appelFn('PUT', `/repos/${repo}/pulls/${numero}/merge`, jeton, { merge_method: 'squash', sha: f.p.head.sha });
+  };
+}
+
+module.exports = { publier, fusionner };
