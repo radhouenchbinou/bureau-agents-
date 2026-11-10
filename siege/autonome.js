@@ -4,12 +4,13 @@
 //   node siege/autonome.js --portfolio <dossier portfolio> --lancer   → exécute (max N tickets, défaut 1)
 // Sans --lancer, aucune instance n'est créée et le backlog n'est pas modifié. Aucune fusion dans ce lot.
 'use strict';
-const path = require('path');
+const path = require('path'), os = require('os');
 const { SourceFichier } = require('./lib/backlog');
 const { boucleParallele, choisir } = require('./lib/autonome');
 const { lancerClaude } = require('./lib/lanceur');
 const pub = require('./lib/publication');
 const revue = require('./lib/revue');
+const { Registre } = require('./lib/instances');
 const crit = require('./lib/criticite');
 
 const RACINE = path.resolve(__dirname, '..');
@@ -31,7 +32,7 @@ function options(argv) {
 
 // Jetons GitHub par rôle (app de l'entreprise, restreints au repo) : dev pour la PR, reviewer pour les feux, devops pour la fusion.
 // Un jeton d'installation dure une heure : une exécution longue doit être relancée.
-async function liaisonGithub(repo) {
+async function liaisonGithub(repo, lancer) {
   const gh = require('./lib/github'), garde = require('./lib/garde');
   const c = gh.config(RACINE), politique = garde.charger(RACINE);
   const [jDev, jRev, jDevops] = await Promise.all(['dev-backend', 'reviewer', 'devops'].map(r => gh.jetonRole(c, politique, r, repo)));
@@ -39,7 +40,7 @@ async function liaisonGithub(repo) {
     publier: pub.publier({ jeton: jDev, repo }),
     poser: pub.poserFeux({ jeton: jRev, repo }),
     fusionner: pub.fusionner({ jeton: jDevops, repo }),
-    revoir: ({ ticket, dossier }) => revue.revoir({ lancer: lancerClaude, dossier, ticket }),
+    revoir: ({ ticket, dossier }) => revue.revoir({ lancer, dossier, ticket }),
   };
 }
 
@@ -60,10 +61,20 @@ async function main(argv) {
   }
 
   // Branchement GitHub : sans --repo, les instances tournent mais ne publient ni ne fusionnent (lot 1 et 2)
-  const liaison = o.repo ? await liaisonGithub(o.repo) : {};
+  // Registre des instances (lu par le Bureau) : chaque lancement est ouvert puis clos ; une instance restée « en cours »
+  // après un arrêt est marquée interrompue
+  const prive = process.env.SIEGE_PRIVE || path.join(os.homedir(), '.siege');
+  const registre = new Registre(path.join(prive, 'instances.json'));
+  registre.reprendre();
+  const trace = fn => async args => {
+    const id = registre.ouvrir({ role: args.role || 'dev-backend', ticket: args.ticket.id, modele: process.env.CLAUDE_MODELE || '', dossier: args.dossier });
+    try { const r = await fn(args); registre.clore(id, { ok: !!(r && r.ok) }); return r; }
+    catch (e) { registre.clore(id, { ok: false, motif: e.message }); throw e; }
+  };
+  const liaison = o.repo ? await liaisonGithub(o.repo, trace(lancerClaude)) : {};
   const bilan = await boucleParallele({
     charger, src: features, racine: RACINE, base: o.instances, max: o.max,
-    runner: async ({ ticket, dossier }) => lancerClaude({ dossier, ticket }),
+    runner: trace(async ({ ticket, dossier }) => lancerClaude({ dossier, ticket })),
     journal: e => console.log('Terminé :', JSON.stringify(e)),
     ...liaison,
   });

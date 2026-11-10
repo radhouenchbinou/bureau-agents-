@@ -370,6 +370,11 @@ const serveur = http.createServer(async (req, res) => {
       try { return envoyer(200, { ok: true, resultat: (await action(op)) || null }); }
       catch (e) { if (e instanceof ErreurBacklog || e instanceof exceptions.ErreurException || e instanceof integrations.ErreurIntegration || e instanceof gh.ErreurGithub || e instanceof tg.ErreurTelegram || e instanceof sl.ErreurSlack || e instanceof tm.ErreurTeams || e instanceof demandes.ErreurDemande || e instanceof moteurs.ErreurMoteur || e instanceof copilote.ErreurCopilot || e instanceof redaction.ErreurRedaction) return envoyer(400, { erreur: e.message }); throw e; }
     }
+    // Instances des agents (mode autonome) : groupées par moteur et modèle, pour le Bureau
+    if (u.pathname === '/api/instances' && req.method === 'GET') {
+      const reg = new (require('./lib/instances').Registre)(path.join(cfg.F.prive, 'instances.json'));
+      return envoyer(200, { groupes: require('./lib/instances').grouper(reg.lire()) });
+    }
     if (req.method !== 'GET') return envoyer(405, { erreur: 'Méthode refusée' });
     const rel = u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname).replace(/^\/+/, '');
     const f = path.resolve(PUBLIC, rel);

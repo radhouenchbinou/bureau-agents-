@@ -107,13 +107,28 @@
     try { localStorage.setItem('siege.vue25d', vue25d ? '1' : '0'); } catch (e) { /* préférence non gardée */ }
     rendreBureau();
   }
+  // Instances des agents (mode autonome) : tous les modèles, en cours et terminées ; rafraîchi tant que le Bureau est affiché
+  function chargerInstances(boite) {
+    fetch('/api/instances', { cache: 'no-store' }).then(r => r.json()).then(d => {
+      if (!boite.isConnected) return;
+      const liste = d.groupes.length ? d.groupes.map(g => h('div', { class: 'instances-groupe' }, h('h4', { text: g.modele }),
+        h('ul', { class: 'liste' }, g.instances.slice(0, 30).map(e => h('li', {}, h('b', { text: e.role || 'agent' }), ' ' + (e.ticket || '—') + ' · ',
+          h('span', { class: 'muted', text: e.etat + (e.debut ? ' · ' + e.debut.slice(11, 16) : '') })))))) : [h('p', { class: 'aide', text: 'Aucune instance lancée.' })];
+      vider(boite, h('h3', { text: 'Instances autonomes' }), ...liste);
+    }).catch(() => { if (boite.isConnected) vider(boite, h('h3', { text: 'Instances autonomes' }), h('p', { class: 'aide', text: 'Liste indisponible.' })); });
+  }
+
   function rendreBureau() {
     const ag = E.agents, groupe = ag.filter(a => a.portee === 'groupe'), roles = E.rolesFiliale.filter(r => ag.some(a => a.nom === r));
     const d = E.activite.direction, q = E.questions.liste.length;
     const dirTxt = { travaille: 'Travaille', attend_ceo: 'Attend votre validation', absent: 'Aucune session ouverte' }[d.etat];
     const fils = E.filiales.filter(f => f.prefixe !== 'GRP');
+    const boiteInstances = h('div', { class: 'carte' }, h('h3', { text: 'Instances autonomes' }), h('p', { class: 'aide', text: 'Chargement…' }));
+    chargerInstances(boiteInstances);
+    (function rafraichir() { setTimeout(() => { if (boiteInstances.isConnected) { chargerInstances(boiteInstances); rafraichir(); } }, 5000); })();
     vider($('#v-bureau'),
       h('p', { class: 'aide', text: 'Les agents s\'allument quand Claude Code travaille dans le Siège. Cliquez un poste pour voir sa fiche.' }),
+      boiteInstances,
       h('div', { class: 'bureau-barre' },
         h('button', { type: 'button', class: 'btn petit', 'aria-pressed': String(vue25d), onclick: basculer25d, text: vue25d ? 'Vue standard' : 'Vue 2.5D' })),
       h('div', { class: 'immeuble' + (vue25d ? ' vue25d' : '') },
