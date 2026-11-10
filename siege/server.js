@@ -228,6 +228,8 @@ async function action(op) {
     case 'github.config': return integrations.configurerGithub(cfg.F.racine, await filiales(cfg.F.filiales), op);
     case 'github.cle': integrations.enregistrerCle(cfg.F.prive, op.pem); return { ok: true };
     case 'github.tester': return integrations.testerGithub(cfg.F.racine);
+    // Clone d'un dépôt GitHub dans projets/ (adresse de l'entreprise seulement)
+    case 'repo.cloner': return require('./lib/clonage').cloner({ racine: cfg.F.racine, url: op.url, nom: op.nom, hote: gh.urlConfiguree() || 'https://github.com' });
     // Telegram (option) : bot, CEO, collaborateurs autorisés, plafond de sessions automatiques du directeur
     case 'telegram.jeton': tg.enregistrerJeton(op.jeton); return { ok: true };
     case 'telegram.tester': { const m = await tg.appel('getMe'); botTelegram = m.username || ''; return { bot: botTelegram }; }
